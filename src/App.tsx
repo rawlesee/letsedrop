@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 
 const DEFAULT_API_BASE_URL = 'https://linkdrop-backend.vercel.app';
 const API_BASE_URL =
-  (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env?.VITE_API_BASE_URL ||
-  DEFAULT_API_BASE_URL;
+  (import.meta as unknown as { env?: { VITE_API_BASE_URL?: string } }).env
+    ?.VITE_API_BASE_URL || DEFAULT_API_BASE_URL;
 
 export interface MediaFormat {
   id: string;
@@ -165,7 +165,10 @@ export default function App() {
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [batchProgressText, setBatchProgressText] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [successInfo, setSuccessInfo] = useState<{ filename: string; platform: string } | null>(null);
+  const [successInfo, setSuccessInfo] = useState<{
+    filename: string;
+    platform: string;
+  } | null>(null);
   const [toastText, setToastText] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeTab, setActiveTab] = useState<'downloader' | 'history'>('downloader');
@@ -197,10 +200,7 @@ export default function App() {
     setHistory(updated);
 
     try {
-      localStorage.setItem(
-        'letsedrop_history',
-        JSON.stringify(updated)
-      );
+      localStorage.setItem('letsedrop_history', JSON.stringify(updated));
     } catch {}
   };
 
@@ -215,51 +215,31 @@ export default function App() {
 
   const deleteHistoryItem = (id: string) => {
     const updated = history.filter((h) => h.id !== id);
-
     setHistory(updated);
 
     try {
-      localStorage.setItem(
-        'letsedrop_history',
-        JSON.stringify(updated)
-      );
-
+      localStorage.setItem('letsedrop_history', JSON.stringify(updated));
       showToast('Item riwayat dihapus.');
     } catch {}
   };
 
   const handlePasteClipboard = async () => {
     try {
-      if (
-        navigator.clipboard &&
-        navigator.clipboard.readText
-      ) {
-        const text =
-          await navigator.clipboard.readText();
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const text = await navigator.clipboard.readText();
 
-        if (
-          text &&
-          text.trim().startsWith('http')
-        ) {
+        if (text && text.trim().startsWith('http')) {
           setUrlInput(text.trim());
           setErrorMessage(null);
-          showToast(
-            'Tautan berhasil ditempel dari clipboard.'
-          );
+          showToast('Tautan berhasil ditempel dari clipboard.');
         } else {
-          showToast(
-            'Clipboard tidak berisi tautan web yang valid.'
-          );
+          showToast('Clipboard tidak berisi tautan web yang valid.');
         }
       } else {
-        showToast(
-          'Izin akses clipboard tidak tersedia pada peramban ini.'
-        );
+        showToast('Izin akses clipboard tidak tersedia pada peramban ini.');
       }
     } catch {
-      showToast(
-        'Gagal membaca clipboard. Tempelkan tautan secara manual.'
-      );
+      showToast('Gagal membaca clipboard. Tempelkan tautan secara manual.');
     }
   };
 
@@ -268,24 +248,12 @@ export default function App() {
     filename: string,
     contentType: string
   ) => {
-    const fileBlob = new Blob(
-      [blob],
-      { type: contentType }
-    );
+    const fileBlob = new Blob([blob], { type: contentType });
+    const blobUrl = window.URL.createObjectURL(fileBlob);
 
-    const blobUrl =
-      window.URL.createObjectURL(
-        fileBlob
-      );
-
-    const link =
-      document.createElement('a');
-
+    const link = document.createElement('a');
     link.href = blobUrl;
-    link.setAttribute(
-      'download',
-      filename
-    );
+    link.setAttribute('download', filename);
     link.style.display = 'none';
 
     document.body.appendChild(link);
@@ -297,18 +265,13 @@ export default function App() {
     }, 5000);
   };
 
-  const handleAnalyze = async (
-    e?: React.FormEvent
-  ) => {
+  const handleAnalyze = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
 
-    const cleanInput =
-      urlInput.trim();
+    const cleanInput = urlInput.trim();
 
     if (!cleanInput) {
-      setErrorMessage(
-        'Tempelkan tautan media publik terlebih dahulu.'
-      );
+      setErrorMessage('Tempelkan tautan media publik terlebih dahulu.');
       return;
     }
 
@@ -319,357 +282,196 @@ export default function App() {
     setIsAnalyzing(true);
 
     try {
-      const response =
-        await fetch(
-          `${API_BASE_URL}/api/analyze`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-              Accept:
-                'application/json',
-            },
-            body: JSON.stringify({
-              url: cleanInput,
-            }),
-          }
-        );
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ url: cleanInput }),
+      });
 
-      const result =
-        await response.json();
+      const result = await response.json();
 
-      if (
-        !response.ok ||
-        !result.success
-      ) {
+      if (!response.ok || !result.success) {
         throw new Error(
           result.message ||
             'Media tidak tersedia atau platform belum didukung.'
         );
       }
 
-      setAnalyzedUrl(
-        cleanInput
-      );
+      setAnalyzedUrl(cleanInput);
 
       /*
-       * =====================================================
        * PENTING:
+       * Video sekarang dicek berdasarkan result.type terlebih dahulu.
+       * Jangan lagi menggunakan:
        *
-       * Prioritaskan result.type === "video".
+       * result.type === 'image' || result.items.length > 0
        *
-       * Sebelumnya kondisi:
-       * result.type === "image" ||
-       * result.items.length > 0
-       *
-       * membuat Reels yang memiliki items video
-       * terbaca sebagai FOTO/JPG.
-       * =====================================================
+       * karena Instagram Reels bisa mempunyai items/thumbnail dan
+       * akhirnya salah masuk ke UI FOTO.
        */
 
-      const resultItems =
-        Array.isArray(
-          result.items
-        )
-          ? result.items
-          : [];
-
-      const hasVideoItem =
-        resultItems.some(
-          (item: MediaItem) =>
-            item.type ===
-            'video'
-        );
-
-      const isVideoResult =
-        result.type ===
-          'video' ||
-        hasVideoItem;
-
-      if (isVideoResult) {
-        const formats: MediaFormat[] =
-          [
-            {
-              id: 'best',
-              label:
-                'Video MP4 (HD)',
-              extension:
-                'mp4',
-              quality:
-                'HD',
-              type:
-                'video',
-            },
-            {
-              id: 'audio',
-              label:
-                'Audio MP3',
-              extension:
-                'mp3',
-              quality:
-                'High Audio',
-              type:
-                'audio',
-            },
-          ];
+      if (result.type === 'video') {
+        const formats: MediaFormat[] = [
+          {
+            id: 'best',
+            label: 'Video MP4 (HD)',
+            extension: 'mp4',
+            quality: 'HD',
+            type: 'video',
+          },
+          {
+            id: 'audio',
+            label: 'Audio MP3',
+            extension: 'mp3',
+            quality: 'High Audio',
+            type: 'audio',
+          },
+        ];
 
         setMediaData({
           ...result,
-
-          type:
-            'video',
-
-          title:
-            result.title ||
-            'Instagram Reels',
-
-          thumbnail:
-            result.thumbnail ||
-            resultItems[0]?.thumbnail ||
-            resultItems[0]?.url ||
-            '',
-
+          type: 'video',
+          title: result.title || 'Video',
+          thumbnail: result.thumbnail || '',
           formats,
         });
 
-        setSelectedFormatId(
-          'best'
-        );
-
-        setSelectedItems([]);
+        setSelectedFormatId('best');
       } else {
         const items: MediaItem[] =
-          resultItems.length > 0
-            ? resultItems.map(
-                (
-                  item: MediaItem,
-                  index: number
-                ) => ({
-                  ...item,
-                  index:
-                    typeof item.index ===
-                    'number'
-                      ? item.index
-                      : index,
-                  type:
-                    item.type ||
-                    'image',
-                  thumbnail:
-                    item.thumbnail ||
-                    item.url ||
-                    '',
-                  ext:
-                    item.ext ||
-                    'jpg',
-                })
-              )
+          Array.isArray(result.items) && result.items.length > 0
+            ? result.items.map((item: MediaItem, index: number) => ({
+                ...item,
+                index:
+                  typeof item.index === 'number' ? item.index : index,
+                type: 'image',
+                ext: item.ext || 'jpg',
+                thumbnail: item.thumbnail || item.url,
+              }))
             : [
                 {
                   index: 0,
                   type: 'image',
-                  url:
-                    result.thumbnail ||
-                    '',
-                  thumbnail:
-                    result.thumbnail ||
-                    '',
+                  url: result.thumbnail || '',
+                  thumbnail: result.thumbnail || '',
                   ext: 'jpg',
                 },
               ];
 
         setMediaData({
           ...result,
-
-          type:
-            'image',
-
-          title:
-            result.title ||
-            'Foto Instagram',
-
-          thumbnail:
-            result.thumbnail ||
-            items[0]?.thumbnail ||
-            items[0]?.url ||
-            '',
-
+          type: 'image',
+          title: result.title || 'Foto Instagram',
+          thumbnail: result.thumbnail || items[0]?.url || '',
           items,
         });
 
-        setSelectedItems(
-          items.map(
-            (item) =>
-              item.index
-          )
-        );
+        setSelectedItems(items.map((it) => it.index));
       }
     } catch (err: unknown) {
-      const error =
-        err as Error;
+      const error = err as Error;
 
       let humanMessage =
         error.message ||
         'Terjadi masalah saat memproses tautan media.';
 
-      const lower =
-        humanMessage.toLowerCase();
+      const lower = humanMessage.toLowerCase();
 
-      if (
-        lower.includes(
-          'private'
-        ) ||
-        lower.includes(
-          'login'
-        )
-      ) {
+      if (lower.includes('private') || lower.includes('login')) {
         humanMessage =
           'Media ini tidak dapat diakses karena bersifat privat atau membutuhkan login akun.';
       } else if (
-        lower.includes(
-          'failed to fetch'
-        ) ||
-        lower.includes(
-          'networkerror'
-        )
+        lower.includes('failed to fetch') ||
+        lower.includes('networkerror')
       ) {
         humanMessage =
           'Gagal menghubungi server Letsedrop. Periksa koneksi internet Anda lalu coba lagi.';
       }
 
-      setErrorMessage(
-        humanMessage
-      );
+      setErrorMessage(humanMessage);
     } finally {
       setIsAnalyzing(false);
     }
   };
 
   const handleDownloadVideo = async () => {
-    const urlToSend =
-      analyzedUrl.trim();
+    const urlToSend = analyzedUrl.trim();
 
-    if (
-      !urlToSend ||
-      !mediaData
-    ) {
-      return;
-    }
+    if (!urlToSend || !mediaData) return;
 
     setIsDownloading(true);
     setErrorMessage(null);
     setSuccessInfo(null);
-    setDownloadStepText(
-      'Menyiapkan media...'
-    );
+    setDownloadStepText('Menyiapkan media...');
 
-    const isAudio =
-      selectedFormatId ===
-      'audio';
-
-    const payloadFormatId =
-      isAudio
-        ? 'audio'
-        : 'best';
+    const isAudio = selectedFormatId === 'audio';
+    const payloadFormatId = isAudio ? 'audio' : 'best';
 
     try {
       setDownloadStepText(
         isAudio
-          ? 'Mengambil audio MP3...'
+          ? 'Mengunduh audio MP3...'
           : 'Mengunduh video MP4...'
       );
 
-      const response =
-        await fetch(
-          `${API_BASE_URL}/api/download`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body: JSON.stringify({
-              url: urlToSend,
-              formatId:
-                payloadFormatId,
-            }),
-          }
-        );
+      const response = await fetch(`${API_BASE_URL}/api/download`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          url: urlToSend,
+          formatId: payloadFormatId,
+        }),
+      });
 
       if (!response.ok) {
         let errDesc =
           'Gagal mengunduh file media dari server.';
 
         try {
-          const errData =
-            await response.json();
+          const errData = await response.json();
 
-          if (
-            errData.message
-          ) {
-            errDesc =
-              errData.message;
+          if (errData.message) {
+            errDesc = errData.message;
           }
         } catch {}
 
-        throw new Error(
-          errDesc
-        );
+        throw new Error(errDesc);
       }
 
-      setDownloadStepText(
-        'Memproses berkas...'
-      );
+      setDownloadStepText('Memproses berkas...');
 
-      let finalFilename =
-        isAudio
-          ? 'Letsedrop_Audio.mp3'
-          : 'Letsedrop_Video.mp4';
+      let finalFilename = isAudio
+        ? 'Letsedrop_Audio.mp3'
+        : 'Letsedrop_Video.mp4';
 
       const disposition =
-        response.headers.get(
-          'Content-Disposition'
-        );
+        response.headers.get('Content-Disposition');
 
-      if (
-        disposition &&
-        disposition.includes(
-          'filename='
-        )
-      ) {
+      if (disposition && disposition.includes('filename=')) {
         const matches =
           /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(
             disposition
           );
 
-        if (
-          matches != null &&
-          matches[1]
-        ) {
-          finalFilename =
-            matches[1]
-              .replace(
-                /['"]/g,
-                ''
-              )
-              .trim();
+        if (matches != null && matches[1]) {
+          finalFilename = matches[1]
+            .replace(/['"]/g, '')
+            .trim();
         }
       }
 
-      const blob =
-        await response.blob();
+      const blob = await response.blob();
 
       const contentType =
-        response.headers.get(
-          'Content-Type'
-        ) ||
-        (isAudio
-          ? 'audio/mpeg'
-          : 'video/mp4');
+        response.headers.get('Content-Type') ||
+        (isAudio ? 'audio/mpeg' : 'video/mp4');
 
-      setDownloadStepText(
-        'Download siap!'
-      );
+      setDownloadStepText('Download siap!');
 
       triggerBrowserDownload(
         blob,
@@ -679,31 +481,20 @@ export default function App() {
 
       saveToHistory({
         url: urlToSend,
-        title:
-          mediaData.title ||
-          finalFilename,
-        thumbnail:
-          mediaData.thumbnail ||
-          '',
-        platform:
-          mediaData.platform ||
-          'VIDEO',
-        filename:
-          finalFilename,
+        title: mediaData.title || finalFilename,
+        thumbnail: mediaData.thumbnail || '',
+        platform: mediaData.platform || 'VIDEO',
+        filename: finalFilename,
       });
 
       setSuccessInfo({
-        filename:
-          finalFilename,
-        platform:
-          (
-            mediaData.platform ||
-            'VIDEO'
-          ).toUpperCase(),
+        filename: finalFilename,
+        platform: (
+          mediaData.platform || 'VIDEO'
+        ).toUpperCase(),
       });
     } catch (err: unknown) {
-      const error =
-        err as Error;
+      const error = err as Error;
 
       setErrorMessage(
         error.message ||
@@ -711,9 +502,7 @@ export default function App() {
       );
     } finally {
       setIsDownloading(false);
-      setDownloadStepText(
-        'Download'
-      );
+      setDownloadStepText('Download');
     }
   };
 
@@ -722,99 +511,68 @@ export default function App() {
     customUrl?: string
   ): Promise<void> => {
     const urlToSend =
-      customUrl ||
-      analyzedUrl.trim();
+      customUrl || analyzedUrl.trim();
 
-    setDownloadingItemIndex(
-      item.index
-    );
-
+    setDownloadingItemIndex(item.index);
     setErrorMessage(null);
 
     try {
-      const response =
-        await fetch(
-          `${API_BASE_URL}/api/download-image`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type':
-                'application/json',
-            },
-            body: JSON.stringify({
-              imageUrl:
-                item.url,
-              itemIndex:
-                item.index,
-              url:
-                urlToSend,
-            }),
-          }
-        );
+      const response = await fetch(
+        `${API_BASE_URL}/api/download-image`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            imageUrl: item.url,
+            itemIndex: item.index,
+            url: urlToSend,
+          }),
+        }
+      );
 
       if (!response.ok) {
         let message =
           'Foto tidak dapat diunduh saat ini.';
 
         try {
-          const data =
-            await response.json();
+          const data = await response.json();
 
-          if (
-            data?.message
-          ) {
-            message =
-              data.message;
+          if (data.message) {
+            message = data.message;
           }
         } catch {}
 
-        throw new Error(
-          message
-        );
+        throw new Error(message);
       }
 
       let filename =
-        `Letsedrop_Instagram_Photo_${
-          item.index + 1
-        }.jpg`;
+        `Letsedrop_Instagram_Photo_${item.index + 1}.jpg`;
 
       const disposition =
-        response.headers.get(
-          'Content-Disposition'
-        );
+        response.headers.get('Content-Disposition');
 
       if (
         disposition &&
-        disposition.includes(
-          'filename='
-        )
+        disposition.includes('filename=')
       ) {
         const matches =
           /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(
             disposition
           );
 
-        if (
-          matches != null &&
-          matches[1]
-        ) {
-          filename =
-            matches[1]
-              .replace(
-                /['"]/g,
-                ''
-              )
-              .trim();
+        if (matches != null && matches[1]) {
+          filename = matches[1]
+            .replace(/['"]/g, '')
+            .trim();
         }
       }
 
-      const blob =
-        await response.blob();
+      const blob = await response.blob();
 
       const contentType =
-        response.headers.get(
-          'Content-Type'
-        ) ||
+        response.headers.get('Content-Type') ||
         'image/jpeg';
 
       triggerBrowserDownload(
@@ -825,229 +583,151 @@ export default function App() {
 
       saveToHistory({
         url: urlToSend,
-        title:
-          `${
-            mediaData?.title ||
-            'Instagram Photo'
-          } (#${
-            item.index + 1
-          })`,
-        thumbnail:
-          item.thumbnail ||
-          item.url,
-        platform:
-          'INSTAGRAM',
+        title: `${
+          mediaData?.title || 'Instagram Photo'
+        } (#${item.index + 1})`,
+        thumbnail: item.thumbnail || item.url,
+        platform: 'INSTAGRAM',
         filename,
       });
 
       showToast(
-        `Foto #${
-          item.index + 1
-        } berhasil diunduh.`
+        `Foto #${item.index + 1} berhasil diunduh.`
       );
     } catch (err: unknown) {
-      const error =
-        err as Error;
+      const error = err as Error;
 
       setErrorMessage(
-        error.message ||
-          'Gagal mengunduh foto.'
+        error.message || 'Gagal mengunduh foto.'
       );
     } finally {
-      setDownloadingItemIndex(
-        null
-      );
+      setDownloadingItemIndex(null);
     }
   };
 
-  const handleDownloadAllImages =
-    async () => {
-      if (
-        !mediaData?.items ||
-        mediaData.items.length ===
-          0
-      ) {
-        return;
-      }
+  const handleDownloadAllImages = async () => {
+    if (
+      !mediaData?.items ||
+      mediaData.items.length === 0
+    ) {
+      return;
+    }
 
-      setIsBatchDownloading(
-        true
-      );
+    setIsBatchDownloading(true);
+    setErrorMessage(null);
 
-      setErrorMessage(null);
+    const items = mediaData.items;
 
-      const items =
-        mediaData.items;
-
-      try {
-        for (
-          let i = 0;
-          i < items.length;
-          i++
-        ) {
-          const currentItem =
-            items[i];
-
-          setBatchProgressText(
-            `Mengunduh foto ${
-              i + 1
-            } dari ${
-              items.length
-            }...`
-          );
-
-          await downloadSingleImage(
-            currentItem,
-            analyzedUrl
-          );
-
-          if (
-            i <
-            items.length - 1
-          ) {
-            await new Promise(
-              (resolve) =>
-                setTimeout(
-                  resolve,
-                  800
-                )
-            );
-          }
-        }
-
-        setSuccessInfo({
-          filename:
-            `${items.length} Foto Berhasil Diunduh`,
-          platform:
-            'INSTAGRAM CAROUSEL',
-        });
-
-        showToast(
-          'Semua foto berhasil dikirim ke perangkat Anda.'
-        );
-      } catch {
-        setErrorMessage(
-          'Terjadi kendala saat mengunduh beberapa foto.'
-        );
-      } finally {
-        setIsBatchDownloading(
-          false
-        );
+    try {
+      for (let i = 0; i < items.length; i++) {
+        const currentItem = items[i];
 
         setBatchProgressText(
-          ''
+          `Mengunduh foto ${i + 1} dari ${items.length}...`
         );
-      }
-    };
 
-  const handleDownloadSelectedImages =
-    async () => {
-      if (
-        !mediaData?.items ||
-        selectedItems.length ===
-          0
-      ) {
-        return;
+        await downloadSingleImage(
+          currentItem,
+          analyzedUrl
+        );
+
+        if (i < items.length - 1) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, 800)
+          );
+        }
       }
 
-      setIsBatchDownloading(
-        true
+      setSuccessInfo({
+        filename: `${items.length} Foto Berhasil Diunduh`,
+        platform: 'INSTAGRAM CAROUSEL',
+      });
+
+      showToast(
+        'Semua foto berhasil dikirim ke perangkat Anda.'
+      );
+    } catch {
+      setErrorMessage(
+        'Terjadi kendala saat mengunduh beberapa foto.'
+      );
+    } finally {
+      setIsBatchDownloading(false);
+      setBatchProgressText('');
+    }
+  };
+
+  const handleDownloadSelectedImages = async () => {
+    if (
+      !mediaData?.items ||
+      selectedItems.length === 0
+    ) {
+      return;
+    }
+
+    setIsBatchDownloading(true);
+    setErrorMessage(null);
+
+    const itemsToDownload =
+      mediaData.items.filter((it) =>
+        selectedItems.includes(it.index)
       );
 
-      setErrorMessage(null);
+    try {
+      for (
+        let i = 0;
+        i < itemsToDownload.length;
+        i++
+      ) {
+        const currentItem =
+          itemsToDownload[i];
 
-      const itemsToDownload =
-        mediaData.items.filter(
-          (item) =>
-            selectedItems.includes(
-              item.index
-            )
+        setBatchProgressText(
+          `Mengunduh ${i + 1} dari ${itemsToDownload.length}...`
         );
 
-      try {
-        for (
-          let i = 0;
+        await downloadSingleImage(
+          currentItem,
+          analyzedUrl
+        );
+
+        if (
           i <
-          itemsToDownload.length;
-          i++
+          itemsToDownload.length - 1
         ) {
-          const currentItem =
-            itemsToDownload[i];
-
-          setBatchProgressText(
-            `Mengunduh ${
-              i + 1
-            } dari ${
-              itemsToDownload.length
-            }...`
+          await new Promise((resolve) =>
+            setTimeout(resolve, 800)
           );
-
-          await downloadSingleImage(
-            currentItem,
-            analyzedUrl
-          );
-
-          if (
-            i <
-            itemsToDownload.length - 1
-          ) {
-            await new Promise(
-              (resolve) =>
-                setTimeout(
-                  resolve,
-                  800
-                )
-            );
-          }
         }
-
-        setSuccessInfo({
-          filename:
-            `${itemsToDownload.length} Foto Terpilih Berhasil Diunduh`,
-          platform:
-            'INSTAGRAM CAROUSEL',
-        });
-
-        showToast(
-          'Semua foto terpilih berhasil dikirim.'
-        );
-      } catch {
-        setErrorMessage(
-          'Terjadi kendala saat mengunduh beberapa foto terpilih.'
-        );
-      } finally {
-        setIsBatchDownloading(
-          false
-        );
-
-        setBatchProgressText(
-          ''
-        );
       }
-    };
 
-  const toggleItemSelection = (
-    index: number
-  ) => {
-    setSelectedItems(
-      (prev) =>
-        prev.includes(index)
-          ? prev.filter(
-              (i) => i !== index
-            )
-          : [
-              ...prev,
-              index,
-            ]
+      setSuccessInfo({
+        filename: `${itemsToDownload.length} Foto Terpilih Berhasil Diunduh`,
+        platform: 'INSTAGRAM CAROUSEL',
+      });
+
+      showToast(
+        'Semua foto terpilih berhasil dikirim.'
+      );
+    } catch {
+      setErrorMessage(
+        'Terjadi kendala saat mengunduh beberapa foto terpilih.'
+      );
+    } finally {
+      setIsBatchDownloading(false);
+      setBatchProgressText('');
+    }
+  };
+
+  const toggleItemSelection = (index: number) => {
+    setSelectedItems((prev) =>
+      prev.includes(index)
+        ? prev.filter((i) => i !== index)
+        : [...prev, index]
     );
   };
 
   const toggleSelectAll = () => {
-    if (
-      !mediaData?.items
-    ) {
-      return;
-    }
+    if (!mediaData?.items) return;
 
     if (
       selectedItems.length ===
@@ -1056,34 +736,18 @@ export default function App() {
       setSelectedItems([]);
     } else {
       setSelectedItems(
-        mediaData.items.map(
-          (item) =>
-            item.index
-        )
+        mediaData.items.map((it) => it.index)
       );
     }
   };
 
-  const formatDuration = (
-    seconds?: number
-  ) => {
-    if (!seconds) {
-      return '';
-    }
+  const formatDuration = (seconds?: number) => {
+    if (!seconds) return '';
 
-    const m =
-      Math.floor(
-        seconds / 60
-      );
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
 
-    const s =
-      seconds % 60;
-
-    return `${m}:${
-      s < 10
-        ? '0'
-        : ''
-    }${s}`;
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   const platforms = [
@@ -1121,26 +785,22 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
+
       {toastText && (
         <div className="fixed bottom-5 right-5 z-50 bg-neutral-900/90 border border-neutral-700 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm animate-fade-in backdrop-blur-md">
-          <span className="w-2 h-2 rounded-full bg-emerald-400" />
-          <span>
-            {toastText}
-          </span>
+          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>{toastText}</span>
         </div>
       )}
 
       <header className="border-b border-neutral-900/80 bg-neutral-950/80 backdrop-blur-lg sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
+
           <div
             className="flex items-center gap-2.5 cursor-pointer select-none group"
             onClick={() => {
-              setActiveTab(
-                'downloader'
-              );
-              setErrorMessage(
-                null
-              );
+              setActiveTab('downloader');
+              setErrorMessage(null);
             }}
           >
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-violet-600 to-fuchsia-600 flex items-center justify-center font-black text-white shadow-lg shadow-indigo-600/30 group-hover:scale-105 transition-transform duration-200">
@@ -1155,13 +815,10 @@ export default function App() {
           <div className="flex items-center gap-1.5 text-xs">
             <button
               onClick={() =>
-                setActiveTab(
-                  'downloader'
-                )
+                setActiveTab('downloader')
               }
               className={`px-3.5 py-2 rounded-xl font-semibold transition ${
-                activeTab ===
-                'downloader'
+                activeTab === 'downloader'
                   ? 'bg-neutral-900 text-indigo-400 border border-neutral-800 shadow-sm'
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-900/50'
               }`}
@@ -1171,23 +828,17 @@ export default function App() {
 
             <button
               onClick={() =>
-                setActiveTab(
-                  'history'
-                )
+                setActiveTab('history')
               }
               className={`px-3.5 py-2 rounded-xl font-semibold transition flex items-center gap-1.5 ${
-                activeTab ===
-                'history'
+                activeTab === 'history'
                   ? 'bg-neutral-900 text-indigo-400 border border-neutral-800 shadow-sm'
                   : 'text-neutral-400 hover:text-white hover:bg-neutral-900/50'
               }`}
             >
-              <span>
-                Riwayat
-              </span>
+              <span>Riwayat</span>
 
-              {history.length >
-                0 && (
+              {history.length > 0 && (
                 <span className="text-[10px] bg-indigo-950 text-indigo-300 px-1.5 py-0.5 rounded-full border border-indigo-800/50 font-bold">
                   {history.length}
                 </span>
@@ -1198,9 +849,10 @@ export default function App() {
       </header>
 
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
-        {activeTab ===
-          'downloader' && (
+
+        {activeTab === 'downloader' && (
           <div className="space-y-10">
+
             <div className="text-center space-y-3 pt-4">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-[11px] font-semibold text-neutral-300 mb-2 shadow-inner">
                 <Icons.Sparkles />
@@ -1217,29 +869,27 @@ export default function App() {
               </h1>
 
               <p className="text-neutral-400 text-sm sm:text-base max-w-lg mx-auto leading-relaxed">
-                Tempel tautan publik video atau foto dari platform favorit Anda. Nikmati unduhan berkecepatan tinggi tanpa iklan mengganggu.
+                Tempel tautan publik video atau foto dari
+                platform favorit Anda. Nikmati unduhan
+                berkecepatan tinggi tanpa iklan mengganggu.
               </p>
             </div>
 
             <div className="bg-neutral-900/90 border border-neutral-800/90 rounded-3xl p-4 sm:p-6 shadow-2xl backdrop-blur-xl relative overflow-hidden">
+
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500 opacity-90" />
 
               <form
-                onSubmit={
-                  handleAnalyze
-                }
+                onSubmit={handleAnalyze}
                 className="space-y-4"
               >
                 <div className="relative">
+
                   <input
                     type="url"
-                    value={
-                      urlInput
-                    }
+                    value={urlInput}
                     onChange={(e) =>
-                      setUrlInput(
-                        e.target.value
-                      )
+                      setUrlInput(e.target.value)
                     }
                     placeholder="Tempel tautan video, foto, atau carousel di sini..."
                     disabled={
@@ -1252,11 +902,10 @@ export default function App() {
                   />
 
                   <div className="absolute right-2.5 top-2.5 flex items-center">
+
                     <button
                       type="button"
-                      onClick={
-                        handlePasteClipboard
-                      }
+                      onClick={handlePasteClipboard}
                       disabled={
                         isAnalyzing ||
                         isDownloading ||
@@ -1265,16 +914,17 @@ export default function App() {
                       className="group px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition border border-neutral-700 min-h-[42px] flex items-center gap-1.5"
                     >
                       <Icons.Paste />
-                      <span>
-                        Tempel
-                      </span>
+                      <span>Tempel</span>
                     </button>
+
                   </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-400">
+
                   <span className="truncate text-neutral-500">
-                    Mendukung: TikTok, Instagram, YouTube, X, Facebook, Reddit
+                    Mendukung: TikTok, Instagram, YouTube,
+                    X, Facebook, Reddit
                   </span>
 
                   <button
@@ -1290,15 +940,11 @@ export default function App() {
                     {isAnalyzing ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                        <span>
-                          Menganalisis...
-                        </span>
+                        <span>Menganalisis...</span>
                       </>
                     ) : (
                       <>
-                        <span>
-                          Analyze
-                        </span>
+                        <span>Analyze</span>
                         <Icons.ArrowRight />
                       </>
                     )}
@@ -1325,24 +971,30 @@ export default function App() {
               )}
             </div>
 
+            {/* =========================
+                IMAGE / CAROUSEL UI
+               ========================= */}
+
             {mediaData &&
-              mediaData.type ===
-                'image' &&
+              mediaData.type === 'image' &&
               mediaData.items && (
                 <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-6 animate-fade-in">
+
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-neutral-800 pb-5">
+
                     <div>
                       <div className="flex items-center gap-2">
+
                         <span className="px-2.5 py-0.5 bg-indigo-600/90 rounded-md text-[10px] font-bold uppercase tracking-wider text-white">
                           {mediaData.platform}
                         </span>
 
                         <span className="px-2.5 py-0.5 bg-neutral-800 rounded-md text-[10px] font-bold uppercase text-neutral-300">
-                          {mediaData.items.length >
-                          1
+                          {mediaData.items.length > 1
                             ? `Carousel (${mediaData.items.length} Foto)`
                             : 'Foto Tunggal'}
                         </span>
+
                       </div>
 
                       <h3 className="text-lg sm:text-xl font-extrabold text-white mt-2 leading-snug">
@@ -1350,18 +1002,13 @@ export default function App() {
                       </h3>
                     </div>
 
-                    {mediaData.items
-                      .length >
-                      1 && (
+                    {mediaData.items.length > 1 && (
                       <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+
                         <button
                           type="button"
-                          onClick={
-                            toggleSelectAll
-                          }
-                          disabled={
-                            isBatchDownloading
-                          }
+                          onClick={toggleSelectAll}
+                          disabled={isBatchDownloading}
                           className="px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-semibold border border-neutral-700 transition"
                         >
                           {selectedItems.length ===
@@ -1377,28 +1024,20 @@ export default function App() {
                           }
                           disabled={
                             isBatchDownloading ||
-                            selectedItems.length ===
-                              0
+                            selectedItems.length === 0
                           }
                           className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs border border-neutral-700 transition disabled:opacity-50 flex items-center gap-1.5"
                         >
                           <span>
                             Unduh Terpilih (
-                            {
-                              selectedItems.length
-                            }
-                            )
+                            {selectedItems.length})
                           </span>
                         </button>
 
                         <button
                           type="button"
-                          onClick={
-                            handleDownloadAllImages
-                          }
-                          disabled={
-                            isBatchDownloading
-                          }
+                          onClick={handleDownloadAllImages}
+                          disabled={isBatchDownloading}
                           className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition disabled:opacity-50 flex items-center justify-center gap-2 flex-1 sm:flex-initial"
                         >
                           {isBatchDownloading ? (
@@ -1423,126 +1062,121 @@ export default function App() {
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-                    {mediaData.items.map(
-                      (item) => {
-                        const isSelected =
-                          selectedItems.includes(
-                            item.index
-                          );
 
-                        return (
-                          <div
-                            key={
-                              item.index
-                            }
-                            className={`group relative bg-neutral-950 border rounded-2xl overflow-hidden flex flex-col transition duration-200 ${
-                              isSelected
-                                ? 'border-indigo-500 ring-2 ring-indigo-500/30'
-                                : 'border-neutral-800 hover:border-neutral-700'
-                            }`}
-                          >
-                            {mediaData
-                              .items &&
-                              mediaData.items
-                                .length >
-                                1 && (
-                                <div
-                                  onClick={() =>
-                                    toggleItemSelection(
-                                      item.index
-                                    )
-                                  }
-                                  className="absolute top-2.5 left-2.5 z-10 w-6 h-6 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center cursor-pointer hover:bg-black/80 transition"
-                                >
-                                  {isSelected && (
-                                    <span className="text-xs text-indigo-400 font-bold">
-                                      ✓
-                                    </span>
-                                  )}
-                                </div>
-                              )}
+                    {mediaData.items.map((item) => {
+                      const isSelected =
+                        selectedItems.includes(
+                          item.index
+                        );
 
-                            <span className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-mono font-bold text-white">
-                              #
-                              {item.index +
-                                1}
-                            </span>
+                      return (
+                        <div
+                          key={item.index}
+                          className={`group relative bg-neutral-950 border rounded-2xl overflow-hidden flex flex-col transition duration-200 ${
+                            isSelected
+                              ? 'border-indigo-500 ring-2 ring-indigo-500/30'
+                              : 'border-neutral-800 hover:border-neutral-700'
+                          }`}
+                        >
 
-                            <div className="aspect-square bg-neutral-900 overflow-hidden relative">
-                              <img
-                                src={
-                                  item.thumbnail ||
-                                  item.url
-                                }
-                                alt={`Item ${
-                                  item.index +
-                                  1
-                                }`}
-                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                                loading="lazy"
-                              />
-                            </div>
-
-                            <div className="p-2.5 border-t border-neutral-800/80 flex items-center justify-between gap-2 bg-neutral-950">
-                              <span className="text-[10px] font-mono text-neutral-400 uppercase">
-                                .
-                                {item.ext ||
-                                  'jpg'}
-                              </span>
-
-                              <button
-                                type="button"
+                          {mediaData.items &&
+                            mediaData.items.length > 1 && (
+                              <div
                                 onClick={() =>
-                                  downloadSingleImage(
-                                    item
+                                  toggleItemSelection(
+                                    item.index
                                   )
                                 }
-                                disabled={
-                                  downloadingItemIndex ===
-                                    item.index ||
-                                  isBatchDownloading
-                                }
-                                className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
+                                className="absolute top-2.5 left-2.5 z-10 w-6 h-6 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center cursor-pointer hover:bg-black/80 transition"
                               >
-                                {downloadingItemIndex ===
-                                item.index ? (
-                                  <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                  <>
-                                    <Icons.Download />
-                                    <span>
-                                      Unduh
-                                    </span>
-                                  </>
+                                {isSelected && (
+                                  <span className="text-xs text-indigo-400 font-bold">
+                                    ✓
+                                  </span>
                                 )}
-                              </button>
-                            </div>
+                              </div>
+                            )}
+
+                          <span className="absolute top-2.5 right-2.5 z-10 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-mono font-bold text-white">
+                            #{item.index + 1}
+                          </span>
+
+                          <div className="aspect-square bg-neutral-900 overflow-hidden relative">
+
+                            <img
+                              src={
+                                item.thumbnail ||
+                                item.url
+                              }
+                              alt={`Item ${
+                                item.index + 1
+                              }`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                              loading="lazy"
+                            />
+
                           </div>
-                        );
-                      }
-                    )}
+
+                          <div className="p-2.5 border-t border-neutral-800/80 flex items-center justify-between gap-2 bg-neutral-950">
+
+                            <span className="text-[10px] font-mono text-neutral-400 uppercase">
+                              .{item.ext || 'jpg'}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadSingleImage(item)
+                              }
+                              disabled={
+                                downloadingItemIndex ===
+                                  item.index ||
+                                isBatchDownloading
+                              }
+                              className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                              {downloadingItemIndex ===
+                              item.index ? (
+                                <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                              ) : (
+                                <>
+                                  <Icons.Download />
+                                  <span>Unduh</span>
+                                </>
+                              )}
+                            </button>
+
+                          </div>
+                        </div>
+                      );
+                    })}
+
                   </div>
 
                   <p className="text-[11px] text-neutral-500 text-center">
-                    Foto dialirkan secara aman melalui server proxy ke folder Downloads perangkat Anda.
+                    Foto dialirkan secara aman melalui server
+                    proxy ke folder Downloads perangkat Anda.
                   </p>
+
                 </div>
               )}
 
+            {/* =========================
+                VIDEO UI — MP4 + MP3
+               ========================= */}
+
             {mediaData &&
-              mediaData.type ===
-                'video' && (
+              mediaData.type === 'video' && (
                 <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-6 animate-fade-in">
+
                   <div className="flex flex-col md:flex-row gap-6">
+
                     <div className="w-full md:w-72 flex-shrink-0 aspect-video bg-neutral-950 rounded-2xl overflow-hidden relative border border-neutral-800 shadow-md">
+
                       {mediaData.thumbnail ? (
                         <img
-                          src={
-                            mediaData.thumbnail
-                          }
-                          alt={
-                            mediaData.title
-                          }
+                          src={mediaData.thumbnail}
+                          alt={mediaData.title}
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -1562,9 +1196,11 @@ export default function App() {
                           )}
                         </span>
                       ) : null}
+
                     </div>
 
                     <div className="flex-1 space-y-4">
+
                       <div>
                         <h3 className="text-lg sm:text-xl font-extrabold text-white leading-snug">
                           {mediaData.title}
@@ -1580,90 +1216,64 @@ export default function App() {
                       </div>
 
                       <div className="space-y-2">
+
                         <label className="text-xs font-semibold text-neutral-300 uppercase tracking-wider block">
                           Pilih Format:
                         </label>
 
                         <div className="grid grid-cols-2 gap-2">
+
                           {mediaData.formats?.map(
                             (fmt) => (
                               <button
-                                key={
-                                  fmt.id
-                                }
+                                key={fmt.id}
                                 type="button"
                                 onClick={() =>
                                   setSelectedFormatId(
                                     fmt.id
                                   )
                                 }
-                                className={`p-3 rounded-2xl border text-left flex items-center justify-between transition min-h-[56px] ${
+                                className={`p-3 rounded-2xl border text-left flex items-center justify-between transition min-h-[48px] ${
                                   selectedFormatId ===
                                   fmt.id
                                     ? 'bg-indigo-950/60 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500/30'
                                     : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:border-neutral-700'
                                 }`}
                               >
+
                                 <div className="flex items-center gap-2">
-                                  <span
-                                    className={`text-xs px-2 py-0.5 rounded font-mono font-bold uppercase ${
-                                      fmt.extension ===
-                                      'mp3'
-                                        ? 'bg-emerald-950 text-emerald-300'
-                                        : 'bg-neutral-800 text-indigo-300'
-                                    }`}
-                                  >
-                                    {
-                                      fmt.extension
-                                    }
+
+                                  <span className="text-xs px-2 py-0.5 rounded font-mono font-bold bg-neutral-800 text-indigo-300 uppercase">
+                                    {fmt.extension}
                                   </span>
 
-                                  <div className="flex flex-col">
-                                    <span className="text-xs font-semibold">
-                                      {
-                                        fmt.label
-                                      }
-                                    </span>
+                                  <span className="text-xs font-semibold">
+                                    {fmt.label}
+                                  </span>
 
-                                    <span className="text-[9px] text-neutral-500 mt-0.5">
-                                      {
-                                        fmt.quality
-                                      }
-                                    </span>
-                                  </div>
                                 </div>
 
-                                {selectedFormatId ===
-                                  fmt.id && (
-                                  <span className="w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center text-[9px] font-bold text-white">
-                                    ✓
-                                  </span>
-                                )}
                               </button>
                             )
                           )}
+
                         </div>
                       </div>
 
                       <div className="pt-2">
+
                         <button
                           type="button"
-                          onClick={
-                            handleDownloadVideo
-                          }
-                          disabled={
-                            isDownloading
-                          }
+                          onClick={handleDownloadVideo}
+                          disabled={isDownloading}
                           className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-emerald-600/20 transition disabled:opacity-60 flex items-center justify-center gap-2 min-h-[52px]"
                         >
+
                           {isDownloading ? (
                             <>
                               <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-
                               <span>
-                                {
-                                  downloadStepText
-                                }
+                                {downloadStepText}
                               </span>
                             </>
                           ) : (
@@ -1671,20 +1281,23 @@ export default function App() {
                               <Icons.Download />
 
                               <span>
-                                Download{' '}
                                 {selectedFormatId ===
                                 'audio'
-                                  ? 'Audio MP3'
-                                  : 'Video MP4'}
+                                  ? 'Download Audio MP3'
+                                  : 'Download Video MP4'}
                               </span>
                             </>
                           )}
+
                         </button>
 
                         <p className="text-[11px] text-neutral-500 text-center mt-2">
-                          File langsung dialirkan ke download manager browser perangkat Anda.
+                          File langsung dialirkan ke download
+                          manager browser perangkat Anda.
                         </p>
+
                       </div>
+
                     </div>
                   </div>
                 </div>
@@ -1692,6 +1305,7 @@ export default function App() {
 
             {successInfo && (
               <div className="bg-neutral-900 border border-emerald-900/60 rounded-3xl p-6 shadow-2xl space-y-4 text-center animate-fade-in">
+
                 <div className="w-12 h-12 mx-auto rounded-full bg-emerald-950/80 border border-emerald-600/40 flex items-center justify-center text-emerald-400 text-xl font-bold">
                   <Icons.Check />
                 </div>
@@ -1707,15 +1321,14 @@ export default function App() {
                 </div>
 
                 <div className="bg-neutral-950 p-3.5 rounded-2xl max-w-md mx-auto text-left text-xs space-y-1 font-mono text-neutral-300 border border-neutral-800">
+
                   <div className="flex justify-between">
                     <span className="text-neutral-500">
                       File:
                     </span>
 
                     <span className="truncate max-w-[200px] text-emerald-400">
-                      {
-                        successInfo.filename
-                      }
+                      {successInfo.filename}
                     </span>
                   </div>
 
@@ -1725,11 +1338,10 @@ export default function App() {
                     </span>
 
                     <span>
-                      {
-                        successInfo.platform
-                      }
+                      {successInfo.platform}
                     </span>
                   </div>
+
                 </div>
 
                 <button
@@ -1744,76 +1356,73 @@ export default function App() {
                 >
                   Download Media Lain
                 </button>
+
               </div>
             )}
 
             <div className="pt-4">
+
               <h2 className="text-center text-xs uppercase tracking-widest text-neutral-500 font-bold mb-5">
                 Platform yang Didukung
               </h2>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-                {platforms.map(
-                  (p) => (
-                    <div
-                      key={
-                        p.name
-                      }
-                      className="p-3.5 bg-neutral-900/60 border border-neutral-800/80 rounded-2xl flex flex-col items-center text-center gap-1 hover:border-neutral-700 transition"
-                    >
-                      <span className="text-2xl">
-                        {p.icon}
-                      </span>
 
-                      <span className="text-xs font-bold text-neutral-200 mt-1">
-                        {p.name}
-                      </span>
+                {platforms.map((p) => (
+                  <div
+                    key={p.name}
+                    className="p-3.5 bg-neutral-900/60 border border-neutral-800/80 rounded-2xl flex flex-col items-center text-center gap-1 hover:border-neutral-700 transition"
+                  >
+                    <span className="text-2xl">
+                      {p.icon}
+                    </span>
 
-                      <span className="text-[10px] text-neutral-500">
-                        {p.badge}
-                      </span>
-                    </div>
-                  )
-                )}
+                    <span className="text-xs font-bold text-neutral-200 mt-1">
+                      {p.name}
+                    </span>
+
+                    <span className="text-[10px] text-neutral-500">
+                      {p.badge}
+                    </span>
+                  </div>
+                ))}
+
               </div>
             </div>
+
           </div>
         )}
 
-        {activeTab ===
-          'history' && (
+        {activeTab === 'history' && (
           <div className="space-y-6">
+
             <div className="flex items-center justify-between">
+
               <div>
                 <h2 className="text-2xl font-bold text-white">
                   Riwayat Unduhan
                 </h2>
 
                 <p className="text-xs text-neutral-400 mt-0.5">
-                  Disimpan secara lokal di browser perangkat Anda.
+                  Disimpan secara lokal di browser perangkat
+                  Anda.
                 </p>
               </div>
 
-              {history.length >
-                0 && (
+              {history.length > 0 && (
                 <button
                   type="button"
-                  onClick={
-                    clearHistory
-                  }
+                  onClick={clearHistory}
                   className="px-3.5 py-2 rounded-xl bg-rose-950/40 border border-rose-800/50 text-rose-300 hover:bg-rose-900/50 text-xs font-semibold transition flex items-center gap-1.5"
                 >
                   <Icons.Trash />
-
-                  <span>
-                    Bersihkan Semua
-                  </span>
+                  <span>Bersihkan Semua</span>
                 </button>
               )}
+
             </div>
 
-            {history.length ===
-            0 ? (
+            {history.length === 0 ? (
               <div className="text-center py-16 bg-neutral-900/30 border border-neutral-800/50 rounded-3xl">
                 <div className="text-4xl mb-2">
                   📂
@@ -1825,113 +1434,122 @@ export default function App() {
               </div>
             ) : (
               <div className="space-y-3">
-                {history.map(
-                  (item) => (
+
+                {history.map((item) => (
+                  <div
+                    key={item.id}
+                    className="p-3.5 bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-between gap-4 hover:border-neutral-700 transition"
+                  >
+
                     <div
-                      key={
-                        item.id
-                      }
-                      className="p-3.5 bg-neutral-900 border border-neutral-800 rounded-2xl flex items-center justify-between gap-4 hover:border-neutral-700 transition"
+                      className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
+                      onClick={() => {
+                        setUrlInput(item.url);
+                        setActiveTab('downloader');
+                      }}
+                      title="Klik untuk analisis ulang"
                     >
-                      <div
-                        className="flex items-center gap-3 min-w-0 cursor-pointer flex-1"
-                        onClick={() => {
-                          setUrlInput(
-                            item.url
-                          );
-                          setActiveTab(
-                            'downloader'
-                          );
-                        }}
-                        title="Klik untuk analisis ulang"
-                      >
-                        <div className="w-12 h-12 bg-neutral-950 rounded-xl overflow-hidden flex-shrink-0 border border-neutral-800">
-                          {item.thumbnail ? (
-                            <img
-                              src={
-                                item.thumbnail
-                              }
-                              alt=""
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-xs">
-                              🎬
-                            </div>
-                          )}
-                        </div>
 
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white truncate hover:text-indigo-400 transition">
-                            {
-                              item.title
-                            }
-                          </p>
+                      <div className="w-12 h-12 bg-neutral-950 rounded-xl overflow-hidden flex-shrink-0 border border-neutral-800">
 
-                          <p className="text-xs text-neutral-400 truncate mt-0.5 font-mono">
-                            <span className="uppercase text-indigo-400 text-[10px] bg-neutral-800 px-1.5 py-0.5 rounded mr-1.5 font-sans">
-                              {
-                                item.platform
-                              }
-                            </span>
+                        {item.thumbnail ? (
+                          <img
+                            src={item.thumbnail}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs">
+                            🎬
+                          </div>
+                        )}
 
-                            {
-                              item.filename
-                            }
-                          </p>
-                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-[11px] text-neutral-500">
-                          {new Date(
-                            item.timestamp
-                          ).toLocaleDateString(
-                            'id-ID',
-                            {
-                              day: 'numeric',
-                              month: 'short',
-                            }
-                          )}
-                        </span>
+                      <div className="min-w-0">
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            deleteHistoryItem(
-                              item.id
-                            )
-                          }
-                          className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800 transition"
-                          title="Hapus dari riwayat"
-                        >
-                          ✕
-                        </button>
+                        <p className="text-sm font-semibold text-white truncate hover:text-indigo-400 transition">
+                          {item.title}
+                        </p>
+
+                        <p className="text-xs text-neutral-400 truncate mt-0.5 font-mono">
+
+                          <span className="uppercase text-indigo-400 text-[10px] bg-neutral-800 px-1.5 py-0.5 rounded mr-1.5 font-sans">
+                            {item.platform}
+                          </span>
+
+                          {item.filename}
+
+                        </p>
+
                       </div>
                     </div>
-                  )
-                )}
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+
+                      <span className="text-[11px] text-neutral-500">
+                        {new Date(
+                          item.timestamp
+                        ).toLocaleDateString(
+                          'id-ID',
+                          {
+                            day: 'numeric',
+                            month: 'short',
+                          }
+                        )}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          deleteHistoryItem(
+                            item.id
+                          )
+                        }
+                        className="p-1.5 rounded-lg text-neutral-500 hover:text-rose-400 hover:bg-neutral-800 transition"
+                        title="Hapus dari riwayat"
+                      >
+                        ✕
+                      </button>
+
+                    </div>
+                  </div>
+                ))}
+
               </div>
             )}
+
           </div>
         )}
+
       </main>
 
       <footer className="border-t border-neutral-900/80 py-8 text-center text-xs text-neutral-500 mt-12 bg-neutral-950">
+
         <div className="max-w-xl mx-auto px-4 space-y-2">
+
           <p className="text-neutral-400 font-medium">
-            Tolong download hanya konten publik yang Anda miliki atau berhak menyimpannya. Letsedrop tidak membypass akun private, login, DRM, atau paywall.
+            Tolong download hanya konten publik yang Anda
+            miliki atau berhak menyimpannya. Letsedrop tidak
+            membypass akun private, login, DRM, atau paywall.
           </p>
 
           <p className="text-[11px] text-neutral-600 leading-relaxed">
-            Letsedrop adalah utilitas pengunduhan konten publik. Letsedrop tidak berafiliasi dengan TikTok, YouTube, Instagram, Meta, atau X. Seluruh hak cipta media merupakan milik pencipta konten masing-masing.
+            Letsedrop adalah utilitas pengunduhan konten
+            publik. Letsedrop tidak berafiliasi dengan TikTok,
+            YouTube, Instagram, Meta, atau X. Seluruh hak
+            cipta media merupakan milik pencipta konten
+            masing-masing.
           </p>
 
           <p className="pt-2 text-[11px] text-neutral-500 font-mono">
-            &copy; 2026 LETSEDROP. Built for high-speed mobile & desktop downloads.
+            &copy; 2026 LETSEDROP. Built for high-speed
+            mobile & desktop downloads.
           </p>
+
         </div>
       </footer>
+
     </div>
   );
 }
