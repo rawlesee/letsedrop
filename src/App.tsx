@@ -33,6 +33,7 @@ export interface MediaMetadata {
   duration?: number;
   formats?: MediaFormat[];
   items?: MediaItem[];
+  isVideoPost?: boolean;
 }
 
 export interface HistoryItem {
@@ -171,7 +172,9 @@ export default function App() {
   } | null>(null);
   const [toastText, setToastText] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [activeTab, setActiveTab] = useState<'downloader' | 'history'>('downloader');
+  const [activeTab, setActiveTab] = useState<'downloader' | 'history'>(
+    'downloader'
+  );
 
   useEffect(() => {
     try {
@@ -260,7 +263,10 @@ export default function App() {
     link.click();
 
     setTimeout(() => {
-      document.body.removeChild(link);
+      if (document.body.contains(link)) {
+        document.body.removeChild(link);
+      }
+
       window.URL.revokeObjectURL(blobUrl);
     }, 5000);
   };
@@ -279,6 +285,7 @@ export default function App() {
     setMediaData(null);
     setSuccessInfo(null);
     setSelectedItems([]);
+    setSelectedFormatId('best');
     setIsAnalyzing(true);
 
     try {
@@ -303,27 +310,63 @@ export default function App() {
       setAnalyzedUrl(cleanInput);
 
       /*
-       * PENTING:
-       * Video sekarang dicek berdasarkan result.type terlebih dahulu.
-       * Jangan lagi menggunakan:
+       * ============================================================
+       * DETEKSI VIDEO
+       * ============================================================
        *
-       * result.type === 'image' || result.items.length > 0
+       * Instagram Reel kadang dikembalikan backend sebagai:
        *
-       * karena Instagram Reels bisa mempunyai items/thumbnail dan
-       * akhirnya salah masuk ke UI FOTO.
+       * {
+       *   type: "image",
+       *   items: [
+       *     {
+       *       type: "video"
+       *     }
+       *   ]
+       * }
+       *
+       * Jadi JANGAN hanya mengandalkan result.type.
+       *
+       * Kita cek:
+       * 1. result.type === "video"
+       * 2. result.isVideoPost === true
+       * 3. ada item dengan type === "video"
        */
 
-      if (result.type === 'video') {
+      const rawItems = Array.isArray(result.items)
+        ? result.items
+        : [];
+
+      const hasVideoItem = rawItems.some(
+        (item: MediaItem) => item?.type === 'video'
+      );
+
+      const isVideo =
+        result.type === 'video' ||
+        result.isVideoPost === true ||
+        hasVideoItem;
+
+      if (isVideo) {
+        const videoItem = rawItems.find(
+          (item: MediaItem) => item?.type === 'video'
+        );
+
+        const videoThumbnail =
+          result.thumbnail ||
+          videoItem?.thumbnail ||
+          videoItem?.url ||
+          '';
+
         const formats: MediaFormat[] = [
           {
-            id: 'best',
+            id: 'mp4',
             label: 'Video MP4 (HD)',
             extension: 'mp4',
             quality: 'HD',
             type: 'video',
           },
           {
-            id: 'audio',
+            id: 'mp3',
             label: 'Audio MP3',
             extension: 'mp3',
             quality: 'High Audio',
@@ -335,42 +378,63 @@ export default function App() {
           ...result,
           type: 'video',
           title: result.title || 'Video',
-          thumbnail: result.thumbnail || '',
+          thumbnail: videoThumbnail,
           formats,
+          items: rawItems,
+          isVideoPost: true,
         });
 
-        setSelectedFormatId('best');
-      } else {
-        const items: MediaItem[] =
-          Array.isArray(result.items) && result.items.length > 0
-            ? result.items.map((item: MediaItem, index: number) => ({
+        setSelectedFormatId('mp4');
+        return;
+      }
+
+      /*
+       * ============================================================
+       * IMAGE / CAROUSEL
+       * ============================================================
+       */
+
+      const items: MediaItem[] =
+        rawItems.length > 0
+          ? rawItems.map(
+              (item: MediaItem, index: number) => ({
                 ...item,
                 index:
-                  typeof item.index === 'number' ? item.index : index,
+                  typeof item.index === 'number'
+                    ? item.index
+                    : index,
                 type: 'image',
                 ext: item.ext || 'jpg',
-                thumbnail: item.thumbnail || item.url,
-              }))
-            : [
-                {
-                  index: 0,
-                  type: 'image',
-                  url: result.thumbnail || '',
-                  thumbnail: result.thumbnail || '',
-                  ext: 'jpg',
-                },
-              ];
+                thumbnail:
+                  item.thumbnail ||
+                  item.url ||
+                  result.thumbnail ||
+                  '',
+              })
+            )
+          : [
+              {
+                index: 0,
+                type: 'image',
+                url: result.thumbnail || '',
+                thumbnail: result.thumbnail || '',
+                ext: 'jpg',
+              },
+            ];
 
-        setMediaData({
-          ...result,
-          type: 'image',
-          title: result.title || 'Foto Instagram',
-          thumbnail: result.thumbnail || items[0]?.url || '',
-          items,
-        });
+      setMediaData({
+        ...result,
+        type: 'image',
+        title: result.title || 'Foto Instagram',
+        thumbnail:
+          result.thumbnail ||
+          items[0]?.thumbnail ||
+          items[0]?.url ||
+          '',
+        items,
+      });
 
-        setSelectedItems(items.map((it) => it.index));
-      }
+      setSelectedItems(items.map((it) => it.index));
     } catch (err: unknown) {
       const error = err as Error;
 
@@ -380,7 +444,10 @@ export default function App() {
 
       const lower = humanMessage.toLowerCase();
 
-      if (lower.includes('private') || lower.includes('login')) {
+      if (
+        lower.includes('private') ||
+        lower.includes('login')
+      ) {
         humanMessage =
           'Media ini tidak dapat diakses karena bersifat privat atau membutuhkan login akun.';
       } else if (
@@ -407,8 +474,18 @@ export default function App() {
     setSuccessInfo(null);
     setDownloadStepText('Menyiapkan media...');
 
-    const isAudio = selectedFormatId === 'audio';
-    const payloadFormatId = isAudio ? 'audio' : 'best';
+    /*
+     * BACKEND SEKARANG MENERIMA:
+     *
+     * format: "mp4"
+     * atau
+     * format: "mp3"
+     */
+
+    const selectedFormat =
+      selectedFormatId === 'mp3' ? 'mp3' : 'mp4';
+
+    const isAudio = selectedFormat === 'mp3';
 
     try {
       setDownloadStepText(
@@ -417,16 +494,20 @@ export default function App() {
           : 'Mengunduh video MP4...'
       );
 
-      const response = await fetch(`${API_BASE_URL}/api/download`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          url: urlToSend,
-          formatId: payloadFormatId,
-        }),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/api/download`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: '*/*',
+          },
+          body: JSON.stringify({
+            url: urlToSend,
+            format: selectedFormat,
+          }),
+        }
+      );
 
       if (!response.ok) {
         let errDesc =
@@ -450,9 +531,14 @@ export default function App() {
         : 'Letsedrop_Video.mp4';
 
       const disposition =
-        response.headers.get('Content-Disposition');
+        response.headers.get(
+          'Content-Disposition'
+        );
 
-      if (disposition && disposition.includes('filename=')) {
+      if (
+        disposition &&
+        disposition.includes('filename=')
+      ) {
         const matches =
           /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(
             disposition
@@ -462,6 +548,29 @@ export default function App() {
           finalFilename = matches[1]
             .replace(/['"]/g, '')
             .trim();
+
+          /*
+           * Pastikan ekstensi sesuai tombol yang dipilih.
+           */
+          if (isAudio) {
+            finalFilename = finalFilename.replace(
+              /\.(mp4|webm|m4a|wav|aac)$/i,
+              '.mp3'
+            );
+
+            if (!/\.mp3$/i.test(finalFilename)) {
+              finalFilename += '.mp3';
+            }
+          } else {
+            finalFilename = finalFilename.replace(
+              /\.(webm|mkv|mov|m4v)$/i,
+              '.mp4'
+            );
+
+            if (!/\.mp4$/i.test(finalFilename)) {
+              finalFilename += '.mp4';
+            }
+          }
         }
       }
 
@@ -469,7 +578,9 @@ export default function App() {
 
       const contentType =
         response.headers.get('Content-Type') ||
-        (isAudio ? 'audio/mpeg' : 'video/mp4');
+        (isAudio
+          ? 'audio/mpeg'
+          : 'video/mp4');
 
       setDownloadStepText('Download siap!');
 
@@ -481,16 +592,22 @@ export default function App() {
 
       saveToHistory({
         url: urlToSend,
-        title: mediaData.title || finalFilename,
-        thumbnail: mediaData.thumbnail || '',
-        platform: mediaData.platform || 'VIDEO',
+        title:
+          mediaData.title ||
+          finalFilename,
+        thumbnail:
+          mediaData.thumbnail || '',
+        platform:
+          mediaData.platform ||
+          'VIDEO',
         filename: finalFilename,
       });
 
       setSuccessInfo({
         filename: finalFilename,
         platform: (
-          mediaData.platform || 'VIDEO'
+          mediaData.platform ||
+          'VIDEO'
         ).toUpperCase(),
       });
     } catch (err: unknown) {
@@ -537,7 +654,8 @@ export default function App() {
           'Foto tidak dapat diunduh saat ini.';
 
         try {
-          const data = await response.json();
+          const data =
+            await response.json();
 
           if (data.message) {
             message = data.message;
@@ -551,7 +669,9 @@ export default function App() {
         `Letsedrop_Instagram_Photo_${item.index + 1}.jpg`;
 
       const disposition =
-        response.headers.get('Content-Disposition');
+        response.headers.get(
+          'Content-Disposition'
+        );
 
       if (
         disposition &&
@@ -569,11 +689,13 @@ export default function App() {
         }
       }
 
-      const blob = await response.blob();
+      const blob =
+        await response.blob();
 
       const contentType =
-        response.headers.get('Content-Type') ||
-        'image/jpeg';
+        response.headers.get(
+          'Content-Type'
+        ) || 'image/jpeg';
 
       triggerBrowserDownload(
         blob,
@@ -584,9 +706,12 @@ export default function App() {
       saveToHistory({
         url: urlToSend,
         title: `${
-          mediaData?.title || 'Instagram Photo'
+          mediaData?.title ||
+          'Instagram Photo'
         } (#${item.index + 1})`,
-        thumbnail: item.thumbnail || item.url,
+        thumbnail:
+          item.thumbnail ||
+          item.url,
         platform: 'INSTAGRAM',
         filename,
       });
@@ -598,7 +723,8 @@ export default function App() {
       const error = err as Error;
 
       setErrorMessage(
-        error.message || 'Gagal mengunduh foto.'
+        error.message ||
+          'Gagal mengunduh foto.'
       );
     } finally {
       setDownloadingItemIndex(null);
@@ -619,7 +745,11 @@ export default function App() {
     const items = mediaData.items;
 
     try {
-      for (let i = 0; i < items.length; i++) {
+      for (
+        let i = 0;
+        i < items.length;
+        i++
+      ) {
         const currentItem = items[i];
 
         setBatchProgressText(
@@ -631,16 +761,21 @@ export default function App() {
           analyzedUrl
         );
 
-        if (i < items.length - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 800)
+        if (
+          i < items.length - 1
+        ) {
+          await new Promise(
+            (resolve) =>
+              setTimeout(resolve, 800)
           );
         }
       }
 
       setSuccessInfo({
-        filename: `${items.length} Foto Berhasil Diunduh`,
-        platform: 'INSTAGRAM CAROUSEL',
+        filename:
+          `${items.length} Foto Berhasil Diunduh`,
+        platform:
+          'INSTAGRAM CAROUSEL',
       });
 
       showToast(
@@ -656,72 +791,85 @@ export default function App() {
     }
   };
 
-  const handleDownloadSelectedImages = async () => {
-    if (
-      !mediaData?.items ||
-      selectedItems.length === 0
-    ) {
-      return;
-    }
-
-    setIsBatchDownloading(true);
-    setErrorMessage(null);
-
-    const itemsToDownload =
-      mediaData.items.filter((it) =>
-        selectedItems.includes(it.index)
-      );
-
-    try {
-      for (
-        let i = 0;
-        i < itemsToDownload.length;
-        i++
+  const handleDownloadSelectedImages =
+    async () => {
+      if (
+        !mediaData?.items ||
+        selectedItems.length === 0
       ) {
-        const currentItem =
-          itemsToDownload[i];
-
-        setBatchProgressText(
-          `Mengunduh ${i + 1} dari ${itemsToDownload.length}...`
-        );
-
-        await downloadSingleImage(
-          currentItem,
-          analyzedUrl
-        );
-
-        if (
-          i <
-          itemsToDownload.length - 1
-        ) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, 800)
-          );
-        }
+        return;
       }
 
-      setSuccessInfo({
-        filename: `${itemsToDownload.length} Foto Terpilih Berhasil Diunduh`,
-        platform: 'INSTAGRAM CAROUSEL',
-      });
+      setIsBatchDownloading(true);
+      setErrorMessage(null);
 
-      showToast(
-        'Semua foto terpilih berhasil dikirim.'
-      );
-    } catch {
-      setErrorMessage(
-        'Terjadi kendala saat mengunduh beberapa foto terpilih.'
-      );
-    } finally {
-      setIsBatchDownloading(false);
-      setBatchProgressText('');
-    }
-  };
+      const itemsToDownload =
+        mediaData.items.filter((it) =>
+          selectedItems.includes(
+            it.index
+          )
+        );
 
-  const toggleItemSelection = (index: number) => {
+      try {
+        for (
+          let i = 0;
+          i < itemsToDownload.length;
+          i++
+        ) {
+          const currentItem =
+            itemsToDownload[i];
+
+          setBatchProgressText(
+            `Mengunduh ${i + 1} dari ${itemsToDownload.length}...`
+          );
+
+          await downloadSingleImage(
+            currentItem,
+            analyzedUrl
+          );
+
+          if (
+            i <
+            itemsToDownload.length - 1
+          ) {
+            await new Promise(
+              (resolve) =>
+                setTimeout(
+                  resolve,
+                  800
+                )
+            );
+          }
+        }
+
+        setSuccessInfo({
+          filename:
+            `${itemsToDownload.length} Foto Terpilih Berhasil Diunduh`,
+          platform:
+            'INSTAGRAM CAROUSEL',
+        });
+
+        showToast(
+          'Semua foto terpilih berhasil dikirim.'
+        );
+      } catch {
+        setErrorMessage(
+          'Terjadi kendala saat mengunduh beberapa foto terpilih.'
+        );
+      } finally {
+        setIsBatchDownloading(false);
+        setBatchProgressText('');
+      }
+    };
+
+  const toggleItemSelection = (
+    index: number
+  ) => {
     setSelectedItems((prev) =>
       prev.includes(index)
-        ? prev.filter((i) => i !== index)
+        ? prev.filter(
+            (i) => i !== index
+          )
         : [...prev, index]
     );
   };
@@ -736,18 +884,27 @@ export default function App() {
       setSelectedItems([]);
     } else {
       setSelectedItems(
-        mediaData.items.map((it) => it.index)
+        mediaData.items.map(
+          (it) => it.index
+        )
       );
     }
   };
 
-  const formatDuration = (seconds?: number) => {
+  const formatDuration = (
+    seconds?: number
+  ) => {
     if (!seconds) return '';
 
-    const m = Math.floor(seconds / 60);
+    const m = Math.floor(
+      seconds / 60
+    );
+
     const s = seconds % 60;
 
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
+    return `${m}:${
+      s < 10 ? '0' : ''
+    }${s}`;
   };
 
   const platforms = [
@@ -1175,8 +1332,12 @@ export default function App() {
 
                       {mediaData.thumbnail ? (
                         <img
-                          src={mediaData.thumbnail}
-                          alt={mediaData.title}
+                          src={
+                            mediaData.thumbnail
+                          }
+                          alt={
+                            mediaData.title
+                          }
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -1264,7 +1425,9 @@ export default function App() {
 
                         <button
                           type="button"
-                          onClick={handleDownloadVideo}
+                          onClick={
+                            handleDownloadVideo
+                          }
                           disabled={isDownloading}
                           className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:opacity-95 text-white font-bold text-sm shadow-xl shadow-emerald-600/20 transition disabled:opacity-60 flex items-center justify-center gap-2 min-h-[52px]"
                         >
@@ -1282,7 +1445,7 @@ export default function App() {
 
                               <span>
                                 {selectedFormatId ===
-                                'audio'
+                                'mp3'
                                   ? 'Download Audio MP3'
                                   : 'Download Video MP4'}
                               </span>
@@ -1351,6 +1514,9 @@ export default function App() {
                     setAnalyzedUrl('');
                     setMediaData(null);
                     setSuccessInfo(null);
+                    setSelectedItems([]);
+                    setSelectedFormatId('mp4');
+                    setErrorMessage(null);
                   }}
                   className="px-6 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold transition border border-neutral-700"
                 >
@@ -1446,6 +1612,7 @@ export default function App() {
                       onClick={() => {
                         setUrlInput(item.url);
                         setActiveTab('downloader');
+                        setErrorMessage(null);
                       }}
                       title="Klik untuk analisis ulang"
                     >
