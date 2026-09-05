@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
-const DEFAULT_API_BASE_URL = 'https://linkdrop-backend.vercel.app';
+const DEFAULT_API_BASE_URL =
+  'https://linkdrop-backend.vercel.app';
 
 const API_BASE_URL =
   (import.meta as unknown as {
@@ -191,27 +192,9 @@ const sanitizeFilename = (value: string) => {
     .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 90);
+    .slice(0, 100);
 
-  return cleaned || 'Media';
-};
-
-const buildLetsedropFilename = (
-  title: string,
-  index: number,
-  type: 'image' | 'video'
-) => {
-  const extension =
-    type === 'video'
-      ? 'mp4'
-      : 'jpg';
-
-  const safeTitle =
-    sanitizeFilename(title)
-      .replace(/\s+/g, '_')
-      .slice(0, 65);
-
-  return `Letsedrop_Instagram_${safeTitle}_${index + 1}.${extension}`;
+  return cleaned || 'Letsedrop_Media';
 };
 
 const getFilenameFromDisposition = (
@@ -228,9 +211,7 @@ const getFilenameFromDisposition = (
 
   if (utfMatch?.[1]) {
     try {
-      return decodeURIComponent(
-        utfMatch[1]
-      );
+      return decodeURIComponent(utfMatch[1]);
     } catch {
       return utfMatch[1];
     }
@@ -249,12 +230,37 @@ const getFilenameFromDisposition = (
   return fallback;
 };
 
-export default function App() {
-  const [urlInput, setUrlInput] =
-    useState('');
+const getMediaExtension = (
+  item: MediaItem
+): string => {
+  if (item.type === 'video') {
+    return item.ext === 'webm'
+      ? 'webm'
+      : 'mp4';
+  }
 
-  const [analyzedUrl, setAnalyzedUrl] =
-    useState('');
+  if (
+    item.ext === 'png' ||
+    item.ext === 'webp' ||
+    item.ext === 'gif' ||
+    item.ext === 'avif'
+  ) {
+    return item.ext;
+  }
+
+  return 'jpg';
+};
+
+const getMediaLabel = (
+  item: MediaItem
+): string =>
+  item.type === 'video'
+    ? 'VIDEO'
+    : 'FOTO';
+
+export default function App() {
+  const [urlInput, setUrlInput] = useState('');
+  const [analyzedUrl, setAnalyzedUrl] = useState('');
 
   const [isAnalyzing, setIsAnalyzing] =
     useState(false);
@@ -262,10 +268,7 @@ export default function App() {
   const [isDownloading, setIsDownloading] =
     useState(false);
 
-  const [
-    downloadingFormat,
-    setDownloadingFormat,
-  ] =
+  const [downloadingFormat, setDownloadingFormat] =
     useState<'mp4' | 'mp3' | null>(null);
 
   const [mediaData, setMediaData] =
@@ -274,34 +277,19 @@ export default function App() {
   const [selectedItems, setSelectedItems] =
     useState<number[]>([]);
 
-  const [
-    downloadingItemIndex,
-    setDownloadingItemIndex,
-  ] =
+  const [downloadingItemIndex, setDownloadingItemIndex] =
     useState<number | null>(null);
 
-  const [
-    isBatchDownloading,
-    setIsBatchDownloading,
-  ] =
+  const [isBatchDownloading, setIsBatchDownloading] =
     useState(false);
 
-  const [
-    batchProgressText,
-    setBatchProgressText,
-  ] =
+  const [batchProgressText, setBatchProgressText] =
     useState('');
 
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] =
+  const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
 
-  const [
-    successInfo,
-    setSuccessInfo,
-  ] =
+  const [successInfo, setSuccessInfo] =
     useState<{
       filename: string;
       platform: string;
@@ -314,9 +302,9 @@ export default function App() {
     useState<HistoryItem[]>([]);
 
   const [activeTab, setActiveTab] =
-    useState<
-      'downloader' | 'history'
-    >('downloader');
+    useState<'downloader' | 'history'>(
+      'downloader'
+    );
 
   useEffect(() => {
     try {
@@ -326,11 +314,13 @@ export default function App() {
         );
 
       if (saved) {
-        const parsed =
+        const parsed: unknown =
           JSON.parse(saved);
 
         if (Array.isArray(parsed)) {
-          setHistory(parsed);
+          setHistory(
+            parsed as HistoryItem[]
+          );
         }
       }
     } catch {
@@ -370,7 +360,9 @@ export default function App() {
             .filter(
               (historyItem) =>
                 historyItem.url !==
-                item.url
+                item.url ||
+                historyItem.filename !==
+                item.filename
             )
             .slice(0, 14),
         ];
@@ -381,7 +373,7 @@ export default function App() {
             JSON.stringify(updated)
           );
         } catch {
-          // Ignore.
+          // Ignore storage errors.
         }
 
         return updated;
@@ -421,9 +413,7 @@ export default function App() {
         try {
           localStorage.setItem(
             'letsedrop_history',
-            JSON.stringify(
-              updated
-            )
+            JSON.stringify(updated)
           );
         } catch {
           // Ignore.
@@ -458,7 +448,9 @@ export default function App() {
               text.trim()
             );
 
-            setErrorMessage(null);
+            setErrorMessage(
+              null
+            );
 
             showToast(
               'Tautan berhasil ditempel dari clipboard.'
@@ -540,127 +532,6 @@ export default function App() {
     );
   };
 
-  const normalizeFrontendItems = (
-    result: any
-  ): MediaItem[] => {
-    const rawItems =
-      Array.isArray(result?.items)
-        ? result.items
-        : [];
-
-    return rawItems
-      .map(
-        (
-          item: any,
-          index: number
-        ): MediaItem | null => {
-          if (
-            !item ||
-            typeof item.url !==
-              'string' ||
-            !item.url
-          ) {
-            return null;
-          }
-
-          const rawType =
-            String(
-              item.type ||
-                ''
-            ).toLowerCase();
-
-          const rawExt =
-            String(
-              item.ext ||
-                ''
-            ).toLowerCase();
-
-          const lowerUrl =
-            item.url.toLowerCase();
-
-          /*
-           * Prioritas tipe:
-           *
-           * 1. type dari backend
-           * 2. extension
-           * 3. URL media
-           *
-           * Jangan menjadikan seluruh carousel
-           * video hanya karena result.type = video.
-           */
-
-          let type:
-            | 'image'
-            | 'video' =
-            'image';
-
-          if (
-            rawType === 'video' ||
-            rawExt === 'mp4' ||
-            rawExt === 'webm' ||
-            lowerUrl.includes(
-              '.mp4'
-            ) ||
-            lowerUrl.includes(
-              '/v/t'
-            ) ||
-            lowerUrl.includes(
-              'video_dash'
-            )
-          ) {
-            type = 'video';
-          }
-
-          const thumbnail =
-            typeof item.thumbnail ===
-              'string' &&
-            item.thumbnail
-              ? item.thumbnail
-              : type === 'image'
-              ? item.url
-              : result?.thumbnail ||
-                item.url;
-
-          return {
-            index:
-              typeof item.index ===
-              'number'
-                ? item.index
-                : index,
-
-            type,
-
-            url: item.url,
-
-            thumbnail,
-
-            ext:
-              type === 'video'
-                ? 'mp4'
-                : 'jpg',
-
-            width:
-              typeof item.width ===
-              'number'
-                ? item.width
-                : undefined,
-
-            height:
-              typeof item.height ===
-              'number'
-                ? item.height
-                : undefined,
-          };
-        }
-      )
-      .filter(
-        (
-          item
-        ): item is MediaItem =>
-          item !== null
-      );
-  };
-
   const handleAnalyze = async (
     event?: React.FormEvent
   ) => {
@@ -673,7 +544,6 @@ export default function App() {
       setErrorMessage(
         'Tempelkan tautan media publik terlebih dahulu.'
       );
-
       return;
     }
 
@@ -690,14 +560,12 @@ export default function App() {
           `${API_BASE_URL}/api/analyze`,
           {
             method: 'POST',
-
             headers: {
               'Content-Type':
                 'application/json',
               Accept:
                 'application/json',
             },
-
             body: JSON.stringify({
               url: cleanInput,
             }),
@@ -725,79 +593,103 @@ export default function App() {
         );
       }
 
-      const items =
-        normalizeFrontendItems(
-          result
-        );
+      const rawItems: MediaItem[] =
+        Array.isArray(
+          result.items
+        )
+          ? result.items.map(
+              (
+                item: any,
+                index: number
+              ): MediaItem => ({
+                index:
+                  typeof item?.index ===
+                  'number'
+                    ? item.index
+                    : index,
+
+                type:
+                  item?.type ===
+                  'video'
+                    ? 'video'
+                    : 'image',
+
+                url:
+                  typeof item?.url ===
+                  'string'
+                    ? item.url
+                    : '',
+
+                thumbnail:
+                  typeof item?.thumbnail ===
+                  'string'
+                    ? item.thumbnail
+                    : typeof result.thumbnail ===
+                      'string'
+                    ? result.thumbnail
+                    : '',
+
+                ext:
+                  typeof item?.ext ===
+                  'string'
+                    ? item.ext
+                    : item?.type ===
+                      'video'
+                    ? 'mp4'
+                    : 'jpg',
+
+                width:
+                  typeof item?.width ===
+                  'number'
+                    ? item.width
+                    : undefined,
+
+                height:
+                  typeof item?.height ===
+                  'number'
+                    ? item.height
+                    : undefined,
+              })
+            )
+          : [];
 
       /*
-       * =================================================
-       * DETEKSI MEDIA
-       * =================================================
+       * SINGLE VIDEO
        *
-       * Ini sengaja dibuat ketat.
+       * Hanya anggap sebagai single video
+       * apabila hasilnya memang satu item video.
        *
-       * Kalau backend bilang "video" tapi item
-       * satu-satunya ternyata image, kita percaya
-       * item tersebut sebagai IMAGE.
-       *
-       * Kalau ada:
-       *
-       * [image, image, video, image, video]
-       *
-       * maka dianggap carousel campuran.
+       * Ini penting supaya carousel campuran
+       * tidak berubah menjadi single video.
        */
 
-      const videoItems =
-        items.filter(
-          (item) =>
-            item.type ===
-            'video'
-        );
-
-      const imageItems =
-        items.filter(
-          (item) =>
-            item.type ===
-            'image'
-        );
-
-      const isSingleVideo =
-        items.length === 1 &&
-        items[0]?.type ===
+      const singleVideoItem =
+        rawItems.length === 1 &&
+        rawItems[0]?.type ===
           'video';
 
-      const isSingleImage =
-        items.length === 1 &&
-        items[0]?.type ===
-          'image';
-
-      const isMixedCarousel =
-        items.length > 1 &&
-        videoItems.length > 0 &&
-        imageItems.length > 0;
-
-      const isImageCarousel =
-        items.length > 1 &&
-        videoItems.length ===
-          0;
+      const isSingleVideo =
+        singleVideoItem &&
+        (
+          result.type ===
+            'video' ||
+          result.isVideoPost ===
+            true ||
+          true
+        );
 
       setAnalyzedUrl(
         cleanInput
       );
 
-      /*
-       * SINGLE VIDEO
-       */
-
       if (isSingleVideo) {
         const videoItem =
-          items[0];
+          rawItems[0];
 
         const videoThumbnail =
           result.thumbnail ||
-          videoItem.thumbnail ||
-          videoItem.url ||
+          videoItem?.thumbnail ||
+          videoItem?.url ||
           '';
 
         const formats: MediaFormat[] =
@@ -805,16 +697,14 @@ export default function App() {
             {
               id: 'mp4',
               label: 'Video MP4',
-              extension:
-                'mp4',
+              extension: 'mp4',
               quality: 'HD',
               type: 'video',
             },
             {
               id: 'mp3',
               label: 'Audio MP3',
-              extension:
-                'mp3',
+              extension: 'mp3',
               quality:
                 'High Audio',
               type: 'audio',
@@ -823,134 +713,131 @@ export default function App() {
 
         setMediaData({
           ...result,
-
           type: 'video',
-
           title:
             result.title ||
-            'Video',
-
+            'Instagram Video',
           thumbnail:
             videoThumbnail,
-
           formats,
-
-          items,
-
-          isVideoPost: true,
+          items:
+            rawItems,
+          isVideoPost:
+            true,
         });
 
         return;
       }
 
       /*
-       * =================================================
-       * SINGLE IMAGE / CAROUSEL / MIXED CAROUSEL
-       * =================================================
+       * CAROUSEL / IMAGE
+       *
+       * JANGAN lagi memaksa type menjadi image.
+       *
+       * Video tetap video.
+       * Foto tetap image.
        */
 
-      if (
-        isSingleImage ||
-        isImageCarousel ||
-        isMixedCarousel
-      ) {
-        let displayTitle =
-          result.title ||
-          (
-            isSingleImage
-              ? 'Foto'
-              : isMixedCarousel
-              ? 'Instagram Carousel'
-              : 'Instagram Carousel'
-          );
+      const items: MediaItem[] =
+        rawItems.length > 0
+          ? rawItems.map(
+              (
+                item: MediaItem,
+                index: number
+              ): MediaItem => ({
+                ...item,
 
-        if (
-          !displayTitle.trim()
-        ) {
-          displayTitle =
-            'Instagram Media';
-        }
+                index:
+                  typeof item.index ===
+                  'number'
+                    ? item.index
+                    : index,
 
-        setMediaData({
-          ...result,
+                type:
+                  item.type ===
+                  'video'
+                    ? 'video'
+                    : 'image',
 
-          type: 'image',
+                ext:
+                  item.ext ||
+                  (
+                    item.type ===
+                    'video'
+                      ? 'mp4'
+                      : 'jpg'
+                  ),
 
-          title:
-            displayTitle,
+                thumbnail:
+                  item.thumbnail ||
+                  (
+                    item.type ===
+                    'video'
+                      ? result.thumbnail ||
+                        item.url
+                      : item.url ||
+                        result.thumbnail ||
+                        ''
+                  ),
+              })
+            )
+          : [
+              {
+                index: 0,
+                type: 'image',
+                url:
+                  result.thumbnail ||
+                  '',
+                thumbnail:
+                  result.thumbnail ||
+                  '',
+                ext: 'jpg',
+              },
+            ];
 
-          thumbnail:
-            result.thumbnail ||
-            items[0]?.thumbnail ||
-            items[0]?.url ||
-            '',
-
-          items,
-
-          isVideoPost: false,
-        });
-
-        setSelectedItems(
-          items.map(
-            (item) =>
-              item.index
-          )
+      const hasVideo =
+        items.some(
+          (item: MediaItem) =>
+            item.type ===
+            'video'
         );
 
-        return;
-      }
+      const hasImage =
+        items.some(
+          (item: MediaItem) =>
+            item.type ===
+            'image'
+        );
 
-      /*
-       * Kalau backend tidak mengirim items sama sekali,
-       * tetapi memberi thumbnail, anggap sebagai foto.
-       *
-       * Ini untuk menjaga compatibility dengan extractor
-       * lama.
-       */
+      const carouselTitle =
+        result.title ||
+        (
+          hasVideo &&
+          hasImage
+            ? 'Instagram Carousel'
+            : hasVideo
+            ? 'Instagram Video'
+            : 'Instagram Foto'
+        );
 
-      if (
-        items.length === 0 &&
-        result.thumbnail
-      ) {
-        const fallbackItem: MediaItem =
-          {
-            index: 0,
-            type: 'image',
-            url:
-              result.thumbnail,
-            thumbnail:
-              result.thumbnail,
-            ext: 'jpg',
-          };
+      setMediaData({
+        ...result,
+        type: 'image',
+        title: carouselTitle,
+        thumbnail:
+          result.thumbnail ||
+          items[0]?.thumbnail ||
+          items[0]?.url ||
+          '',
+        items,
+      });
 
-        setMediaData({
-          ...result,
-
-          type: 'image',
-
-          title:
-            result.title ||
-            'Foto',
-
-          thumbnail:
-            result.thumbnail,
-
-          items: [
-            fallbackItem,
-          ],
-
-          isVideoPost: false,
-        });
-
-        setSelectedItems([
-          0,
-        ]);
-
-        return;
-      }
-
-      throw new Error(
-        'Jenis media tidak berhasil dikenali.'
+      setSelectedItems(
+        items.map(
+          (
+            item: MediaItem
+          ) => item.index
+        )
       );
     } catch (
       error: unknown
@@ -1006,9 +893,7 @@ export default function App() {
   };
 
   /*
-   * =======================================================
    * SINGLE VIDEO DOWNLOAD
-   * =======================================================
    */
 
   const handleDownloadVideo = (
@@ -1047,25 +932,20 @@ export default function App() {
 
     saveToHistory({
       url: urlToSend,
-
       title:
         mediaData.title ||
         filename,
-
       thumbnail:
         mediaData.thumbnail ||
         '',
-
       platform:
         mediaData.platform ||
         'INSTAGRAM',
-
       filename,
     });
 
     setSuccessInfo({
       filename,
-
       platform: (
         mediaData.platform ||
         'INSTAGRAM'
@@ -1121,7 +1001,6 @@ export default function App() {
       setIsDownloading(
         false
       );
-
       setDownloadingFormat(
         null
       );
@@ -1129,21 +1008,12 @@ export default function App() {
   };
 
   /*
-   * =======================================================
-   * DOWNLOAD CAROUSEL ITEM
-   * =======================================================
+   * CAROUSEL MEDIA DOWNLOAD
    *
-   * Dipakai untuk:
-   *
-   * - foto
-   * - video
-   * - carousel campuran
-   *
-   * Backend /api/download-carousel akan menentukan
-   * media berdasarkan itemIndex.
+   * Satu fungsi untuk FOTO dan VIDEO.
    */
 
-  const downloadCarouselItem =
+  const downloadSingleMedia =
     async (
       item: MediaItem,
       customUrl?: string
@@ -1154,7 +1024,7 @@ export default function App() {
 
       if (!urlToSend) {
         throw new Error(
-          'URL Instagram tidak tersedia.'
+          'URL postingan tidak tersedia.'
         );
       }
 
@@ -1167,37 +1037,30 @@ export default function App() {
       try {
         const response =
           await fetch(
-            `${API_BASE_URL}/api/download-carousel`,
+            `${API_BASE_URL}/api/download-image`,
             {
               method: 'POST',
-
               headers: {
                 'Content-Type':
                   'application/json',
-
                 Accept:
                   '*/*',
               },
+              body:
+                JSON.stringify({
+                  url:
+                    urlToSend,
 
-              body: JSON.stringify({
-                url:
-                  urlToSend,
+                  itemIndex:
+                    item.index,
 
-                type:
-                  item.type,
-
-                itemIndex:
-                  item.index,
-
-                imageUrl:
-                  item.url,
-              }),
+                  imageUrl:
+                    item.url,
+                }),
             }
           );
 
-        if (
-          !response.ok
-        ) {
+        if (!response.ok) {
           let message =
             item.type ===
             'video'
@@ -1223,13 +1086,16 @@ export default function App() {
           );
         }
 
-        const fallbackFilename =
-          buildLetsedropFilename(
-            mediaData?.title ||
-              'Instagram_Media',
-            item.index,
-            item.type
+        const extension =
+          getMediaExtension(
+            item
           );
+
+        const fallbackFilename =
+          `Letsedrop_Instagram_${sanitizeFilename(
+            mediaData?.title ||
+              'Media'
+          )}_${item.index + 1}.${extension}`;
 
         const disposition =
           response.headers.get(
@@ -1295,6 +1161,24 @@ export default function App() {
                 item.index + 1
               } berhasil diunduh.`
         );
+      } catch (
+        error: unknown
+      ) {
+        const err =
+          error instanceof Error
+            ? error
+            : new Error(
+                item.type ===
+                'video'
+                  ? 'Gagal mengunduh video.'
+                  : 'Gagal mengunduh foto.'
+              );
+
+        setErrorMessage(
+          err.message
+        );
+
+        throw err;
       } finally {
         setDownloadingItemIndex(
           null
@@ -1303,42 +1187,15 @@ export default function App() {
     };
 
   /*
-   * =======================================================
-   * SINGLE CAROUSEL ITEM BUTTON
-   * =======================================================
-   */
-
-  const downloadSingleItem =
-    async (
-      item: MediaItem
-    ) => {
-      try {
-        await downloadCarouselItem(
-          item
-        );
-      } catch (
-        error: unknown
-      ) {
-        const err =
-          error instanceof Error
-            ? error
-            : new Error(
-                'Gagal mengunduh media.'
-              );
-
-        setErrorMessage(
-          err.message
-        );
-      }
-    };
-
-  /*
-   * =======================================================
    * DOWNLOAD ALL
-   * =======================================================
+   *
+   * Sekarang berlaku untuk:
+   * - foto
+   * - video
+   * - carousel campuran
    */
 
-  const handleDownloadAllImages =
+  const handleDownloadAllMedia =
     async () => {
       if (
         !mediaData?.items ||
@@ -1357,6 +1214,8 @@ export default function App() {
       const items =
         mediaData.items;
 
+      let successCount = 0;
+
       try {
         for (
           let i = 0;
@@ -1368,50 +1227,80 @@ export default function App() {
 
           setBatchProgressText(
             `Mengunduh ${
+              currentItem.type ===
+              'video'
+                ? 'video'
+                : 'foto'
+            } ${
               i + 1
             } dari ${
               items.length
             }...`
           );
 
-          await downloadCarouselItem(
-            currentItem,
-            analyzedUrl
-          );
+          try {
+            await downloadSingleMedia(
+              currentItem,
+              analyzedUrl
+            );
+
+            successCount++;
+          } catch {
+            // Lanjutkan item berikutnya.
+          }
 
           if (
             i <
             items.length - 1
           ) {
             await sleep(
-              350
+              450
             );
           }
         }
 
-        setSuccessInfo({
-          filename:
-            `${items.length} Media Berhasil Diunduh`,
+        if (
+          successCount ===
+          items.length
+        ) {
+          setSuccessInfo({
+            filename:
+              `${items.length} Media Berhasil Diunduh`,
+            platform:
+              'INSTAGRAM CAROUSEL',
+          });
 
-          platform:
-            'INSTAGRAM CAROUSEL',
-        });
+          showToast(
+            'Semua media berhasil diunduh.'
+          );
+        } else if (
+          successCount > 0
+        ) {
+          setSuccessInfo({
+            filename:
+              `${successCount} dari ${items.length} Media Berhasil`,
+            platform:
+              'INSTAGRAM CAROUSEL',
+          });
 
-        showToast(
-          'Semua media berhasil diunduh.'
-        );
+          showToast(
+            `${successCount} dari ${items.length} media berhasil diunduh.`
+          );
+        } else {
+          throw new Error(
+            'Tidak ada media yang berhasil diunduh.'
+          );
+        }
       } catch (
         error: unknown
       ) {
-        const err =
+        const message =
           error instanceof Error
-            ? error
-            : new Error(
-                'Terjadi kendala saat mengunduh beberapa media.'
-              );
+            ? error.message
+            : 'Terjadi kendala saat mengunduh media.';
 
         setErrorMessage(
-          err.message
+          message
         );
       } finally {
         setIsBatchDownloading(
@@ -1421,16 +1310,14 @@ export default function App() {
         setBatchProgressText(
           ''
         );
+
+        setDownloadingItemIndex(
+          null
+        );
       }
     };
 
-  /*
-   * =======================================================
-   * DOWNLOAD SELECTED
-   * =======================================================
-   */
-
-  const handleDownloadSelectedImages =
+  const handleDownloadSelectedMedia =
     async () => {
       if (
         !mediaData?.items ||
@@ -1448,11 +1335,15 @@ export default function App() {
 
       const itemsToDownload =
         mediaData.items.filter(
-          (item) =>
+          (
+            item: MediaItem
+          ) =>
             selectedItems.includes(
               item.index
             )
         );
+
+      let successCount = 0;
 
       try {
         for (
@@ -1462,22 +1353,31 @@ export default function App() {
           i++
         ) {
           const currentItem =
-            itemsToDownload[
-              i
-            ];
+            itemsToDownload[i];
 
           setBatchProgressText(
             `Mengunduh ${
+              currentItem.type ===
+              'video'
+                ? 'video'
+                : 'foto'
+            } ${
               i + 1
             } dari ${
               itemsToDownload.length
             }...`
           );
 
-          await downloadCarouselItem(
-            currentItem,
-            analyzedUrl
-          );
+          try {
+            await downloadSingleMedia(
+              currentItem,
+              analyzedUrl
+            );
+
+            successCount++;
+          } catch {
+            // Lanjutkan.
+          }
 
           if (
             i <
@@ -1485,34 +1385,53 @@ export default function App() {
               1
           ) {
             await sleep(
-              350
+              450
             );
           }
         }
 
-        setSuccessInfo({
-          filename:
-            `${itemsToDownload.length} Media Terpilih Berhasil Diunduh`,
+        if (
+          successCount ===
+          itemsToDownload.length
+        ) {
+          setSuccessInfo({
+            filename:
+              `${successCount} Media Terpilih Berhasil Diunduh`,
+            platform:
+              'INSTAGRAM CAROUSEL',
+          });
 
-          platform:
-            'INSTAGRAM CAROUSEL',
-        });
+          showToast(
+            'Semua media terpilih berhasil diunduh.'
+          );
+        } else if (
+          successCount > 0
+        ) {
+          setSuccessInfo({
+            filename:
+              `${successCount} dari ${itemsToDownload.length} Media Terpilih Berhasil`,
+            platform:
+              'INSTAGRAM CAROUSEL',
+          });
 
-        showToast(
-          'Semua media terpilih berhasil diunduh.'
-        );
+          showToast(
+            `${successCount} media berhasil diunduh.`
+          );
+        } else {
+          throw new Error(
+            'Tidak ada media terpilih yang berhasil diunduh.'
+          );
+        }
       } catch (
         error: unknown
       ) {
-        const err =
+        const message =
           error instanceof Error
-            ? error
-            : new Error(
-                'Terjadi kendala saat mengunduh media terpilih.'
-              );
+            ? error.message
+            : 'Terjadi kendala saat mengunduh media terpilih.';
 
         setErrorMessage(
-          err.message
+          message
         );
       } finally {
         setIsBatchDownloading(
@@ -1522,29 +1441,36 @@ export default function App() {
         setBatchProgressText(
           ''
         );
+
+        setDownloadingItemIndex(
+          null
+        );
       }
     };
 
-  const toggleItemSelection =
-    (index: number) => {
-      setSelectedItems(
-        (previous) =>
-          previous.includes(
-            index
-          )
-            ? previous.filter(
-                (
-                  itemIndex
-                ) =>
-                  itemIndex !==
-                  index
-              )
-            : [
-                ...previous,
-                index,
-              ]
-      );
-    };
+  const toggleItemSelection = (
+    index: number
+  ) => {
+    setSelectedItems(
+      (
+        previous
+      ) =>
+        previous.includes(
+          index
+        )
+          ? previous.filter(
+              (
+                itemIndex
+              ) =>
+                itemIndex !==
+                index
+            )
+          : [
+              ...previous,
+              index,
+            ]
+    );
+  };
 
   const toggleSelectAll =
     () => {
@@ -1564,8 +1490,9 @@ export default function App() {
       } else {
         setSelectedItems(
           mediaData.items.map(
-            (item) =>
-              item.index
+            (
+              item: MediaItem
+            ) => item.index
           )
         );
       }
@@ -1582,9 +1509,7 @@ export default function App() {
     }
 
     const totalSeconds =
-      Math.floor(
-        seconds
-      );
+      Math.floor(seconds);
 
     const minutes =
       Math.floor(
@@ -1631,15 +1556,11 @@ export default function App() {
       setSuccessInfo(null);
       setErrorMessage(null);
       setIsDownloading(false);
-      setDownloadingFormat(
-        null
-      );
+      setDownloadingFormat(null);
       setIsBatchDownloading(
         false
       );
-      setBatchProgressText(
-        ''
-      );
+      setBatchProgressText('');
     };
 
   const platforms = [
@@ -1678,32 +1599,29 @@ export default function App() {
   const carouselItems =
     mediaData?.items || [];
 
-  const carouselVideoCount =
-    carouselItems.filter(
-      (item) =>
+  const carouselHasVideo =
+    carouselItems.some(
+      (
+        item: MediaItem
+      ) =>
         item.type ===
         'video'
-    ).length;
+    );
 
-  const carouselImageCount =
-    carouselItems.filter(
-      (item) =>
+  const carouselHasImage =
+    carouselItems.some(
+      (
+        item: MediaItem
+      ) =>
         item.type ===
         'image'
-    ).length;
-
-  const isMixedCarousel =
-    carouselItems.length >
-      1 &&
-    carouselVideoCount >
-      0 &&
-    carouselImageCount >
-      0;
+    );
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans selection:bg-indigo-600 selection:text-white">
 
       {/* TOAST */}
+
       {toastText && (
         <div className="fixed bottom-5 left-1/2 -translate-x-1/2 sm:left-auto sm:right-5 sm:translate-x-0 z-50 bg-neutral-900/95 border border-neutral-700 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm backdrop-blur-xl max-w-[calc(100vw-2rem)]">
           <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
@@ -1715,6 +1633,7 @@ export default function App() {
       )}
 
       {/* HEADER */}
+
       <header className="border-b border-neutral-900/80 bg-neutral-950/85 backdrop-blur-xl sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
 
@@ -1789,14 +1708,17 @@ export default function App() {
       </header>
 
       {/* MAIN */}
+
       <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8">
 
         {/* DOWNLOADER */}
+
         {activeTab ===
           'downloader' && (
           <div className="space-y-10">
 
             {/* HERO */}
+
             <div className="text-center space-y-3 pt-4">
 
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900/90 border border-neutral-800 text-[11px] font-semibold text-neutral-300 mb-2">
@@ -1829,6 +1751,7 @@ export default function App() {
             </div>
 
             {/* INPUT */}
+
             <div className="bg-neutral-900/90 border border-neutral-800/90 rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
 
               <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
@@ -1955,7 +1878,8 @@ export default function App() {
 
             </div>
 
-            {/* VIDEO RESULT */}
+            {/* SINGLE VIDEO */}
+
             {mediaData?.type ===
               'video' && (
               <div className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden shadow-2xl">
@@ -1968,7 +1892,7 @@ export default function App() {
 
                       <span className="px-2.5 py-1 bg-indigo-600/90 rounded-lg text-[10px] font-black uppercase tracking-wider text-white">
                         {mediaData.platform ||
-                          'VIDEO'}
+                          'INSTAGRAM'}
                       </span>
 
                       <span className="px-2.5 py-1 bg-neutral-800 rounded-lg text-[10px] font-bold uppercase tracking-wider text-neutral-300 border border-neutral-700">
@@ -1988,7 +1912,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* PREVIEW */}
                 <div className="px-5 sm:px-7">
 
                   <div className="relative aspect-video rounded-2xl overflow-hidden bg-neutral-950 border border-neutral-800">
@@ -2007,13 +1930,16 @@ export default function App() {
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-neutral-600">
                         <div className="text-center">
+
                           <div className="w-14 h-14 mx-auto rounded-2xl bg-neutral-900 flex items-center justify-center mb-2">
                             <Icons.Play />
                           </div>
 
                           <span className="text-xs">
-                            Video preview
+                            Video
+                            preview
                           </span>
+
                         </div>
                       </div>
                     )}
@@ -2043,7 +1969,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* INFO */}
                 <div className="px-5 sm:px-7 pt-5">
 
                   <h2 className="text-lg sm:text-xl font-extrabold text-white leading-snug">
@@ -2061,7 +1986,6 @@ export default function App() {
 
                 </div>
 
-                {/* DOWNLOAD OPTIONS */}
                 <div className="p-5 sm:p-7">
 
                   <div className="mb-4">
@@ -2081,6 +2005,7 @@ export default function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
                     {/* MP4 */}
+
                     <button
                       type="button"
                       onClick={() =>
@@ -2093,8 +2018,6 @@ export default function App() {
                       }
                       className="group relative overflow-hidden rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-indigo-950/80 to-neutral-950 border border-indigo-800/60 hover:border-indigo-500 transition text-left disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-
-                      <div className="absolute inset-0 bg-indigo-500/0 group-hover:bg-indigo-500/5 transition" />
 
                       <div className="relative flex items-center gap-4">
 
@@ -2137,6 +2060,7 @@ export default function App() {
                     </button>
 
                     {/* MP3 */}
+
                     <button
                       type="button"
                       onClick={() =>
@@ -2149,8 +2073,6 @@ export default function App() {
                       }
                       className="group relative overflow-hidden rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-fuchsia-950/70 to-neutral-950 border border-fuchsia-800/50 hover:border-fuchsia-500 transition text-left disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-
-                      <div className="absolute inset-0 bg-fuchsia-500/0 group-hover:bg-fuchsia-500/5 transition" />
 
                       <div className="relative flex items-center gap-4">
 
@@ -2211,182 +2133,163 @@ export default function App() {
               </div>
             )}
 
-            {/* IMAGE / CAROUSEL / MIXED CAROUSEL */}
-            {mediaData?.type ===
-              'image' &&
-              mediaData.items && (
-              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-6">
+            {/* CAROUSEL / MIXED MEDIA */}
 
-                {/* HEADER */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-neutral-800 pb-5">
+            {mediaData?.items &&
+              mediaData.items.length >
+                0 &&
+              mediaData.type ===
+                'image' && (
+                <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 sm:p-7 shadow-2xl space-y-6">
 
-                  <div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-neutral-800 pb-5">
 
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div>
 
-                      <span className="px-2.5 py-0.5 bg-indigo-600/90 rounded-md text-[10px] font-bold uppercase tracking-wider text-white">
-                        {mediaData.platform ||
-                          'INSTAGRAM'}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
 
-                      <span className="px-2.5 py-0.5 bg-neutral-800 rounded-md text-[10px] font-bold uppercase text-neutral-300">
-                        {mediaData.items.length ===
-                        1
-                          ? 'Foto Tunggal'
-                          : isMixedCarousel
-                          ? `Carousel Campuran (${carouselImageCount} Foto • ${carouselVideoCount} Video)`
-                          : `Carousel (${mediaData.items.length} Media)`}
-                      </span>
+                        <span className="px-2.5 py-0.5 bg-indigo-600/90 rounded-md text-[10px] font-bold uppercase tracking-wider text-white">
+                          {mediaData.platform ||
+                            'INSTAGRAM'}
+                        </span>
 
-                    </div>
+                        <span className="px-2.5 py-0.5 bg-neutral-800 rounded-md text-[10px] font-bold uppercase text-neutral-300">
+                          {carouselItems.length >
+                          1
+                            ? carouselHasVideo &&
+                              carouselHasImage
+                              ? `Carousel Campuran (${carouselItems.length} Media)`
+                              : carouselHasVideo
+                              ? `Carousel (${carouselItems.length} Video)`
+                              : `Carousel (${carouselItems.length} Foto)`
+                            : getMediaLabel(
+                                carouselItems[0]
+                              )}
+                        </span>
 
-                    <h3 className="text-lg sm:text-xl font-extrabold text-white mt-2 leading-snug">
-                      {mediaData.title ||
-                        'Instagram Media'}
-                    </h3>
+                      </div>
 
-                  </div>
+                      <h3 className="text-lg sm:text-xl font-extrabold text-white mt-2 leading-snug">
+                        {mediaData.title ||
+                          'Instagram Media'}
+                      </h3>
 
-                  {mediaData.items.length >
-                    1 && (
-                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-
-                      <button
-                        type="button"
-                        onClick={
-                          toggleSelectAll
-                        }
-                        disabled={
-                          isBatchDownloading
-                        }
-                        className="px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-semibold border border-neutral-700 transition disabled:opacity-50"
-                      >
-                        {selectedItems.length ===
-                        mediaData.items.length
-                          ? 'Batal Pilih'
-                          : 'Pilih Semua'}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={
-                          handleDownloadSelectedImages
-                        }
-                        disabled={
-                          isBatchDownloading ||
-                          selectedItems.length ===
-                            0
-                        }
-                        className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs border border-neutral-700 transition disabled:opacity-50"
-                      >
-                        Unduh Terpilih (
-                        {
-                          selectedItems.length
-                        }
-                        )
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={
-                          handleDownloadAllImages
-                        }
-                        disabled={
-                          isBatchDownloading
-                        }
-                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition disabled:opacity-50 flex items-center justify-center gap-2 flex-1 sm:flex-initial"
-                      >
-                        {isBatchDownloading ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-
-                            <span>
-                              {
-                                batchProgressText
-                              }
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <Icons.Download />
-
-                            <span>
-                              Download
-                              All
-                            </span>
-                          </>
+                      {carouselHasVideo &&
+                        carouselHasImage && (
+                          <p className="text-[11px] text-neutral-500 mt-1">
+                            Foto dan video
+                            ditampilkan
+                            sesuai urutan
+                            postingan asli.
+                          </p>
                         )}
-                      </button>
 
                     </div>
-                  )}
-                </div>
 
-                {/* MIXED INFO */}
-                {isMixedCarousel && (
-                  <div className="p-3.5 rounded-2xl bg-indigo-950/30 border border-indigo-800/40">
+                    {carouselItems.length >
+                      1 && (
+                      <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
 
-                    <div className="flex items-center gap-2.5">
-
-                      <div className="w-8 h-8 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300">
-                        <Icons.Sparkles />
-                      </div>
-
-                      <div>
-
-                        <p className="text-xs font-bold text-indigo-200">
-                          Carousel campuran
-                        </p>
-
-                        <p className="text-[11px] text-indigo-300/60 mt-0.5">
-                          Foto dan video
-                          dideteksi
-                          terpisah per
-                          slide.
-                        </p>
-
-                      </div>
-
-                    </div>
-                  </div>
-                )}
-
-                {/* MEDIA GRID */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-
-                  {mediaData.items.map(
-                    (item) => {
-                      const isSelected =
-                        selectedItems.includes(
-                          item.index
-                        );
-
-                      const isVideo =
-                        item.type ===
-                        'video';
-
-                      const extension =
-                        isVideo
-                          ? 'mp4'
-                          : 'jpg';
-
-                      return (
-                        <div
-                          key={
-                            item.index
+                        <button
+                          type="button"
+                          onClick={
+                            toggleSelectAll
                           }
-                          className={`group relative bg-neutral-950 border rounded-2xl overflow-hidden flex flex-col transition duration-200 ${
-                            isSelected
-                              ? 'border-indigo-500 ring-2 ring-indigo-500/30'
-                              : 'border-neutral-800 hover:border-neutral-700'
-                          }`}
+                          disabled={
+                            isBatchDownloading
+                          }
+                          className="px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-semibold border border-neutral-700 transition disabled:opacity-50"
                         >
+                          {selectedItems.length ===
+                          carouselItems.length
+                            ? 'Batal Pilih'
+                            : 'Pilih Semua'}
+                        </button>
 
-                          {/* SELECT */}
-                          {mediaData.items &&
-                            mediaData
-                              .items
-                              .length >
+                        <button
+                          type="button"
+                          onClick={
+                            handleDownloadSelectedMedia
+                          }
+                          disabled={
+                            isBatchDownloading ||
+                            selectedItems.length ===
+                              0
+                          }
+                          className="px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs border border-neutral-700 transition disabled:opacity-50"
+                        >
+                          Unduh
+                          Terpilih (
+                          {
+                            selectedItems.length
+                          }
+                          )
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={
+                            handleDownloadAllMedia
+                          }
+                          disabled={
+                            isBatchDownloading
+                          }
+                          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition disabled:opacity-50 flex items-center justify-center gap-2 flex-1 sm:flex-initial"
+                        >
+                          {isBatchDownloading ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+
+                              <span className="truncate max-w-[160px]">
+                                {batchProgressText ||
+                                  'Mengunduh...'}
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Icons.Download />
+
+                              <span>
+                                Download
+                                All
+                              </span>
+                            </>
+                          )}
+                        </button>
+
+                      </div>
+                    )}
+
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
+
+                    {carouselItems.map(
+                      (
+                        item: MediaItem
+                      ) => {
+                        const isSelected =
+                          selectedItems.includes(
+                            item.index
+                          );
+
+                        const isItemDownloading =
+                          downloadingItemIndex ===
+                          item.index;
+
+                        return (
+                          <div
+                            key={`${item.index}-${item.type}`}
+                            className={`group relative bg-neutral-950 border rounded-2xl overflow-hidden flex flex-col transition duration-200 ${
+                              isSelected
+                                ? 'border-indigo-500 ring-2 ring-indigo-500/30'
+                                : 'border-neutral-800 hover:border-neutral-700'
+                            }`}
+                          >
+
+                            {/* SELECT */}
+
+                            {carouselItems.length >
                               1 && (
                               <button
                                 type="button"
@@ -2399,6 +2302,10 @@ export default function App() {
                                   isBatchDownloading
                                 }
                                 className="absolute top-2.5 left-2.5 z-20 w-6 h-6 rounded-lg bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-black/80 transition disabled:opacity-50"
+                                aria-label={`Pilih media #${
+                                  item.index +
+                                  1
+                                }`}
                               >
                                 {isSelected && (
                                   <span className="text-xs text-indigo-400 font-bold">
@@ -2408,119 +2315,164 @@ export default function App() {
                               </button>
                             )}
 
-                          {/* NUMBER */}
-                          <span className="absolute top-2.5 right-2.5 z-20 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-mono font-bold text-white">
-                            #
-                            {item.index +
-                              1}
-                          </span>
+                            {/* NUMBER */}
 
-                          {/* TYPE BADGE */}
-                          <span
-                            className={`absolute bottom-[52px] left-2.5 z-20 px-2 py-1 rounded-md backdrop-blur-md text-[9px] font-black uppercase tracking-wider border ${
-                              isVideo
-                                ? 'bg-indigo-600/90 border-indigo-400/50 text-white'
-                                : 'bg-black/70 border-white/20 text-neutral-200'
-                            }`}
-                          >
-                            {isVideo
-                              ? 'VIDEO'
-                              : 'FOTO'}
-                          </span>
-
-                          {/* PREVIEW */}
-                          <div className="aspect-square bg-neutral-900 overflow-hidden relative">
-
-                            {item.thumbnail ||
-                            item.url ? (
-                              <img
-                                src={
-                                  item.thumbnail ||
-                                  item.url
-                                }
-                                alt={`Item ${
-                                  item.index +
-                                  1
-                                }`}
-                                className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
-                                loading="lazy"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-neutral-700 text-xs">
-                                No Preview
-                              </div>
-                            )}
-
-                            {/* PLAY ICON FOR VIDEO */}
-                            {isVideo && (
-                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-
-                                <div className="w-11 h-11 rounded-full bg-black/55 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-xl">
-                                  <Icons.Play />
-                                </div>
-
-                              </div>
-                            )}
-
-                          </div>
-
-                          {/* FOOTER */}
-                          <div className="p-2.5 border-t border-neutral-800/80 flex items-center justify-between gap-2 bg-neutral-950">
-
-                            <span className="text-[10px] font-mono text-neutral-400 uppercase">
-                              .
-                              {
-                                extension
-                              }
+                            <span className="absolute top-2.5 right-2.5 z-20 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[10px] font-mono font-bold text-white">
+                              #
+                              {item.index +
+                                1}
                             </span>
 
-                            <button
-                              type="button"
-                              onClick={() =>
-                                downloadSingleItem(
-                                  item
-                                )
-                              }
-                              disabled={
-                                downloadingItemIndex ===
-                                  item.index ||
-                                isBatchDownloading
-                              }
-                              className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
+                            {/* TYPE */}
+
+                            <span
+                              className={`absolute left-2.5 bottom-[3.5rem] z-20 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-sm text-[9px] font-black tracking-wider ${
+                                item.type ===
+                                'video'
+                                  ? 'text-indigo-300'
+                                  : 'text-white'
+                              }`}
                             >
-                              {downloadingItemIndex ===
-                              item.index ? (
-                                <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                              {item.type ===
+                              'video'
+                                ? 'VIDEO'
+                                : 'FOTO'}
+                            </span>
+
+                            {/* PREVIEW */}
+
+                            <div className="aspect-square bg-neutral-900 overflow-hidden relative">
+
+                              {item.type ===
+                              'video' ? (
+                                item.url ? (
+                                  <video
+                                    src={
+                                      item.url
+                                    }
+                                    poster={
+                                      item.thumbnail ||
+                                      undefined
+                                    }
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                    controls
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : item.thumbnail ? (
+                                  <img
+                                    src={
+                                      item.thumbnail
+                                    }
+                                    alt={`Video ${
+                                      item.index +
+                                      1
+                                    }`}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex flex-col items-center justify-center text-neutral-600 gap-2">
+                                    <Icons.Play />
+
+                                    <span className="text-[10px]">
+                                      Video
+                                    </span>
+                                  </div>
+                                )
+                              ) : item.thumbnail ||
+                                item.url ? (
+                                <img
+                                  src={
+                                    item.thumbnail ||
+                                    item.url
+                                  }
+                                  alt={`Foto ${
+                                    item.index +
+                                    1
+                                  }`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                                  loading="lazy"
+                                />
                               ) : (
-                                <>
-                                  <Icons.Download />
-
-                                  <span>
-                                    Unduh
-                                  </span>
-                                </>
+                                <div className="w-full h-full flex items-center justify-center text-neutral-700 text-xs">
+                                  No
+                                  Preview
+                                </div>
                               )}
-                            </button>
 
+                            </div>
+
+                            {/* FOOTER */}
+
+                            <div className="p-2.5 border-t border-neutral-800/80 flex items-center justify-between gap-2 bg-neutral-950">
+
+                              <span className="text-[10px] font-mono text-neutral-400 uppercase">
+                                .
+                                {getMediaExtension(
+                                  item
+                                )}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  downloadSingleMedia(
+                                    item
+                                  ).catch(
+                                    () => {}
+                                  )
+                                }
+                                disabled={
+                                  isItemDownloading ||
+                                  isBatchDownloading
+                                }
+                                className="px-3 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition border border-neutral-700 disabled:opacity-50 flex items-center gap-1.5"
+                              >
+                                {isItemDownloading ? (
+                                  <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                  <>
+                                    <Icons.Download />
+
+                                    <span>
+                                      Unduh
+                                    </span>
+                                  </>
+                                )}
+                              </button>
+
+                            </div>
                           </div>
-                        </div>
-                      );
-                    }
+                        );
+                      }
+                    )}
+
+                  </div>
+
+                  {batchProgressText && (
+                    <div className="p-3 rounded-xl bg-indigo-950/30 border border-indigo-900/40 text-center">
+
+                      <p className="text-[11px] text-indigo-300">
+                        {batchProgressText}
+                      </p>
+
+                    </div>
                   )}
 
+                  <p className="text-[11px] text-neutral-500 text-center">
+                    Setiap media diproses
+                    sesuai tipe aslinya.
+                    Foto tetap JPG dan
+                    video tetap MP4.
+                  </p>
+
                 </div>
-
-                <p className="text-[11px] text-neutral-500 text-center">
-                  Foto dan video
-                  carousel diproses
-                  berdasarkan tipe
-                  masing-masing media.
-                </p>
-
-              </div>
-            )}
+              )}
 
             {/* SUCCESS */}
+
             {successInfo && (
               <div className="bg-neutral-900 border border-emerald-900/60 rounded-3xl p-6 shadow-2xl space-y-4 text-center">
 
@@ -2536,8 +2488,8 @@ export default function App() {
 
                   <p className="text-xs text-neutral-400 mt-1">
                     Browser Anda sedang
-                    menangani
-                    penyimpanan file.
+                    menangani penyimpanan
+                    file.
                   </p>
 
                 </div>
@@ -2581,14 +2533,15 @@ export default function App() {
                   }
                   className="px-6 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold transition border border-neutral-700"
                 >
-                  Download Media
-                  Lain
+                  Download
+                  Media Lain
                 </button>
 
               </div>
             )}
 
             {/* PLATFORMS */}
+
             <div className="pt-4">
 
               <h2 className="text-center text-xs uppercase tracking-widest text-neutral-500 font-bold mb-5">
@@ -2599,7 +2552,13 @@ export default function App() {
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
 
                 {platforms.map(
-                  (platform) => (
+                  (
+                    platform: {
+                      name: string;
+                      icon: string;
+                      badge: string;
+                    }
+                  ) => (
                     <div
                       key={
                         platform.name
@@ -2634,6 +2593,7 @@ export default function App() {
         )}
 
         {/* HISTORY */}
+
         {activeTab ===
           'history' && (
           <div className="space-y-6">
@@ -2648,8 +2608,8 @@ export default function App() {
 
                 <p className="text-xs text-neutral-400 mt-0.5">
                   Disimpan secara lokal
-                  di browser
-                  perangkat Anda.
+                  di browser perangkat
+                  Anda.
                 </p>
 
               </div>
@@ -2664,6 +2624,7 @@ export default function App() {
                   className="px-3.5 py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-950/70 border border-rose-900/60 text-rose-300 text-xs font-semibold transition flex items-center gap-2"
                 >
                   <Icons.Trash />
+
                   Hapus Semua
                 </button>
               )}
@@ -2684,10 +2645,10 @@ export default function App() {
                 </h3>
 
                 <p className="text-sm text-neutral-500 mt-1 max-w-sm mx-auto">
-                  Media yang berhasil
-                  Anda download
-                  akan muncul di
-                  sini.
+                  Media yang
+                  berhasil Anda
+                  download akan
+                  muncul di sini.
                 </p>
 
                 <button
@@ -2699,7 +2660,8 @@ export default function App() {
                   }
                   className="mt-5 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition"
                 >
-                  Mulai Download
+                  Mulai
+                  Download
                 </button>
 
               </div>
@@ -2707,7 +2669,9 @@ export default function App() {
               <div className="space-y-3">
 
                 {history.map(
-                  (item) => (
+                  (
+                    item: HistoryItem
+                  ) => (
                     <div
                       key={
                         item.id
@@ -2794,6 +2758,7 @@ export default function App() {
       </main>
 
       {/* FOOTER */}
+
       <footer className="border-t border-neutral-900/80 mt-auto">
 
         <div className="max-w-5xl mx-auto px-4 py-6 text-center">
